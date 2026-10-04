@@ -4,6 +4,8 @@
 **Date:** 2026-10-04
 **Scope:** What the research says about where an edge can come from, a fact-check of the original concept doc, what the hardware can do, and the evaluation protocol plus pass/fail metrics the system has to meet before real money is used.
 
+> **Update (2026-10-04, after review):** decisions are recorded in `02-design-spec.md` §0. **GDELT and prediction markets are dropped entirely.** Open-weight JEV replicas exist (JEV-9B, OpenJev, Von), so the System-1 filter uses one of them locally instead of a home-built logit-readout model (§4.2 remains the fallback). Kronos is the adopted price model.
+
 ---
 
 ## 0. TL;DR
