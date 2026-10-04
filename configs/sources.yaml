@@ -1,0 +1,21 @@
+# Data-source assumptions that MUST be measured, not assumed.
+# Fill each value from docs/data-probe-report.md (scripts/probe_apis.py). Code that depends on a
+# value refuses to run while it is UNVERIFIED.
+
+edgar:
+  # Timezone of `acceptanceDateTime` in data.sec.gov submissions JSON: utc | et
+  acceptance_tz: UNVERIFIED
+
+dedupe:
+  # Exact 5-shingle Jaccard on headline+summary above which two items are the same article.
+  jaccard_threshold: UNVERIFIED
+  window_hours: 48
+
+latency:
+  # p95 of (our receipt - vendor created_at) on the live news WebSocket, plus processing margin.
+  # Added to vendor timestamps in backtests so historical items are not acted on sooner than live ones.
+  news_minutes: UNVERIFIED
+
+bars:
+  # Feed the free plan serves for history: sip | iex
+  feed: UNVERIFIED
