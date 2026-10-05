@@ -33,6 +33,17 @@ def block_ci(values: list[float], seed: int = 42, block: int = 5) -> list[float 
     return [float(np.quantile(draws, 0.025)), float(np.quantile(draws, 0.975))]
 
 
+def rank_correlation(left: list[float] | np.ndarray, right: list[float] | np.ndarray) -> float:
+    x, y = np.asarray(left, dtype=float), np.asarray(right, dtype=float)
+    if not len(x) or not len(y) or np.ptp(x) == 0 or np.ptp(y) == 0:
+        return float("nan")
+    return float(spearmanr(x, y).statistic)
+
+
+def format_optional(value: Any, spec: str) -> str:
+    return format(value, spec) if value is not None else "n/a"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--inputs", type=Path, required=True)
@@ -41,6 +52,7 @@ def main() -> None:
     a = ap.parse_args()
     jobs: list[dict[str, Any]] = json.loads(a.inputs.read_text())
     bootstrap_block_cycles = 5 * len({int(job["interval_minutes"]) for job in jobs})
+    decision_sessions = sorted({job["session"] for job in jobs})
     forecasts = json.loads(a.forecasts.read_text())
     if not forecasts["complete"]:
         raise ValueError("Intraday forecast set is incomplete")
@@ -167,7 +179,7 @@ def main() -> None:
         for cycle, rows in sorted(groups.items()):
             if len(rows) < 6:
                 continue
-            corr = spearmanr([r[feature] for r in rows], [r[corr_target] for r in rows]).statistic
+            corr = rank_correlation([r[feature] for r in rows], [r[corr_target] for r in rows])
             if np.isfinite(corr):
                 values.append((cycle, float(corr)))
         ordered = sorted(values, key=lambda x: x[0])
@@ -190,8 +202,8 @@ def main() -> None:
     for _, rows in sorted(groups.items()):
         if len(rows) < 6:
             continue
-        raw_corr = spearmanr([r["forecast_return"] for r in rows], [r["actual_return"] for r in rows]).statistic
-        excess_corr = spearmanr([r["forecast_excess"] for r in rows], [r["actual_excess"] for r in rows]).statistic
+        raw_corr = rank_correlation([r["forecast_return"] for r in rows], [r["actual_return"] for r in rows])
+        excess_corr = rank_correlation([r["forecast_excess"] for r in rows], [r["actual_excess"] for r in rows])
         if np.isfinite(raw_corr) and np.isfinite(excess_corr):
             excess_ics.append(float(excess_corr))
             rank_ic_differences.append(float(abs(raw_corr - excess_corr)))
@@ -221,7 +233,7 @@ def main() -> None:
         actual_values = np.asarray([float(row["actual_excess"]) for row in rows])
         forecast_resid = forecast_values - design @ np.linalg.lstsq(design, forecast_values, rcond=None)[0]
         actual_resid = actual_values - design @ np.linalg.lstsq(design, actual_values, rcond=None)[0]
-        corr = spearmanr(forecast_resid, actual_resid).statistic
+        corr = rank_correlation(forecast_resid, actual_resid)
         if np.isfinite(corr):
             residual_ics.append(float(corr))
     residual_midpoint = len(residual_ics) // 2
@@ -277,6 +289,10 @@ def main() -> None:
         "excluded_insufficient_400_session_history": insufficient_history,
         "excluded_missing_five_session_label": missing_labels,
         "decision_cycles": len(groups),
+        "decision_session_range": {
+            "first": decision_sessions[0] if decision_sessions else None,
+            "last": decision_sessions[-1] if decision_sessions else None,
+        },
         "bootstrap_block_cycles": bootstrap_block_cycles,
         "by_interval": {
             str(interval): sum(row["interval_minutes"] == interval for row in output) for interval in [15, 30]
@@ -295,6 +311,11 @@ def main() -> None:
         f"{len(output)} valid ticker-cycle samples; {len(groups)} decision cycles; "
         f"{invalid} invalid/missing model comparisons; {insufficient_history} excluded for fewer than "
         f"400 prior daily sessions; {missing_labels} missing five-session labels.",
+        (
+            f"Prepared decision sessions: {decision_sessions[0]} to {decision_sessions[-1]}"
+            if decision_sessions
+            else "No prepared decision sessions."
+        ),
         "Paired SPY subtraction changed rank IC by at most "
         f"{rank_invariance['max_abs_raw_vs_spy_relative_rank_ic_difference'] or 0:.3g} "
         "across evaluated cycles.",
@@ -305,21 +326,25 @@ def main() -> None:
     for feature, m in metrics.items():
         ci = m["block5_bootstrap_95pct_ci"]
         ci_s = "n/a" if ci[0] is None else f"[{ci[0]:+.3f}, {ci[1]:+.3f}]"
-        half_text = f"{m['first_half_mean_ic']:+.3f}/{m['second_half_mean_ic']:+.3f}"
+        half_text = (
+            f"{format_optional(m['first_half_mean_ic'], '+.3f')}/"
+            f"{format_optional(m['second_half_mean_ic'], '+.3f')}"
+        )
         lines.append(
-            f"| {feature} | {m['mean_cycle_rank_ic']:+.3f} | {m['median_cycle_rank_ic']:+.3f} | "
-            f"{m['positive_cycle_fraction']:.0%} | {ci_s} | {half_text} |"
+            f"| {feature} | {format_optional(m['mean_cycle_rank_ic'], '+.3f')} | "
+            f"{format_optional(m['median_cycle_rank_ic'], '+.3f')} | "
+            f"{format_optional(m['positive_cycle_fraction'], '.0%')} | {ci_s} | {half_text} |"
         )
     lines.extend(
         [
             "",
             "## Absolute SPY-relative forecasts",
             "",
-            f"Mean forecast excess: {absolute_market_adjusted['mean_forecast_excess']:+.3%}; "
-            f"mean realized excess: {absolute_market_adjusted['mean_realized_excess']:+.3%}; "
-            f"MAE: {absolute_market_adjusted['mean_absolute_error']:.3%}; "
-            f"zero-forecast MAE: {absolute_market_adjusted['zero_forecast_baseline_mae']:.3%}; "
-            f"directional accuracy: {absolute_market_adjusted['directional_accuracy']:.1%}.",
+            f"Mean forecast excess: {format_optional(absolute_market_adjusted['mean_forecast_excess'], '+.3%')}; "
+            f"mean realized excess: {format_optional(absolute_market_adjusted['mean_realized_excess'], '+.3%')}; "
+            f"MAE: {format_optional(absolute_market_adjusted['mean_absolute_error'], '.3%')}; "
+            f"zero-forecast MAE: {format_optional(absolute_market_adjusted['zero_forecast_baseline_mae'], '.3%')}; "
+            f"directional accuracy: {format_optional(absolute_market_adjusted['directional_accuracy'], '.1%')}.",
             "These fixed summaries use no tuned buy threshold and do not include transaction costs.",
         ]
     )
