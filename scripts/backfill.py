@@ -60,6 +60,15 @@ def chunks(rows: Iterable[Any], size: int = 2000) -> Iterator[list[Any]]:
         yield batch
 
 
+def read_symbols(path: Path) -> list[str]:
+    """Read explicit symbols from a JSON list or a universe manifest."""
+    payload = json.loads(path.read_text())
+    symbols = payload.get("selected_symbols", payload.get("symbols")) if isinstance(payload, dict) else payload
+    if not isinstance(symbols, list) or not symbols or not all(isinstance(symbol, str) for symbol in symbols):
+        raise ValueError(f"{path} must contain a non-empty symbols list or universe manifest")
+    return sorted({symbol.strip().upper() for symbol in symbols if symbol.strip()})
+
+
 def news(st: Settings, start: date, end: date, symbols: list[str] | None = None) -> None:
     st.require("alpaca_key", "alpaca_secret")
     raw, state = RawStore(st.data_dir), State(st.data_dir, "news")
@@ -88,15 +97,23 @@ def news_tickers(st: Settings) -> list[str]:
     return sorted(t for t in seen if t.isascii() and "/" not in t and "\\" not in t)
 
 
-def bars_step(st: Settings, start: date, end: date, intraday: bool, symbols: list[str] | None) -> None:
+def bars_step(
+    st: Settings, start: date, end: date, intraday: bool, symbols: list[str] | None, daily_adjusted: bool = False
+) -> None:
     st.require("alpaca_key", "alpaca_secret")
     feed = sources_config.verified(sources_config.load(), "bars.feed")
-    step, tf, adj = ("intraday_bars", "15Min", "all") if intraday else ("daily_bars", "1Day", "raw")
+    if intraday:
+        step, tf, adj = "intraday_bars", "15Min", "all"
+    else:
+        step, tf, adj = "daily_bars_all", "1Day", "all"
+        if not daily_adjusted:
+            step, adj = "daily_bars", "raw"
     state = State(st.data_dir, step)
     if symbols is None:
         symbols = universe.ever_eligible(BarStore(st.data_dir, "1Day_raw").read()) if intraday else news_tickers(st)
     symbols = sorted(set(symbols) | {"SPY"})
-    store = BarStore(st.data_dir, "15Min" if intraday else "1Day_raw")
+    timeframe = "15Min" if intraday else "1Day_all" if daily_adjusted else "1Day_raw"
+    store = BarStore(st.data_dir, timeframe)
     manifest = st.data_dir / "state" / f"{step}-manifest.json"
     provenance = {"feed": feed, "adjustment": adj, "timeframe": tf}
     if manifest.exists() and json.loads(manifest.read_text()) != provenance:
@@ -203,20 +220,27 @@ def normalize(st: Settings) -> int:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("step", choices=["news", "daily-bars", "intraday-bars", "edgar", "finnhub", "normalize"])
+    ap.add_argument(
+        "step", choices=["news", "daily-bars", "daily-bars-all", "intraday-bars", "edgar", "finnhub", "normalize"]
+    )
     ap.add_argument("--start", type=date.fromisoformat, default=date(2016, 1, 1))
     ap.add_argument("--end", type=date.fromisoformat, default=datetime.now(UTC).date(), help="exclusive UTC date")
     ap.add_argument("--symbols", help="comma-separated explicit integration universe")
+    ap.add_argument("--symbols-file", type=Path, help="JSON symbol list or universe manifest with selected_symbols")
     a = ap.parse_args()
+    if a.symbols and a.symbols_file:
+        ap.error("use only one of --symbols and --symbols-file")
     symbols = sorted(set(a.symbols.upper().split(","))) if a.symbols else None
+    if a.symbols_file:
+        symbols = read_symbols(a.symbols_file)
     st = load_settings()
     # Serialize a source's download/checkpoint transaction, while providers share HTTP budgets.
     lock = hashlib.sha256(a.step.encode()).hexdigest()[:12]
     with file_lock(st.data_dir / "state" / f"run-{lock}.lock"):
         if a.step == "news":
             news(st, a.start, a.end, symbols)
-        elif a.step in ("daily-bars", "intraday-bars"):
-            bars_step(st, a.start, a.end, a.step == "intraday-bars", symbols)
+        elif a.step in ("daily-bars", "daily-bars-all", "intraday-bars"):
+            bars_step(st, a.start, a.end, a.step == "intraday-bars", symbols, a.step == "daily-bars-all")
         elif a.step == "edgar":
             edgar_step(st, a.start, a.end, symbols)
         elif a.step == "finnhub":

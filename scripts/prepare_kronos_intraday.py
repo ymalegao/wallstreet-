@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from bisect import bisect_left
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -96,6 +97,21 @@ def main() -> None:
             }
         )
     bars30 = make_30m(bars)
+    by_symbol: dict[int, dict[str, list[dict[str, Any]]]] = {15: {}, 30: {}}
+    for (symbol, _), rows in bars15.items():
+        by_symbol[15].setdefault(symbol, []).extend(rows)
+    for (symbol, _), rows in bars30.items():
+        by_symbol[30].setdefault(symbol, []).extend(rows)
+    for interval in (15, 30):
+        for rows in by_symbol[interval].values():
+            rows.sort(key=lambda row: row["ts"])
+    times_by_symbol = {
+        interval: {
+            symbol: [datetime.fromisoformat(row["ts"]).replace(tzinfo=ET) for row in rows]
+            for symbol, rows in series.items()
+        }
+        for interval, series in by_symbol.items()
+    }
     cycles = sorted({row["cycle"] for row in samples})
     output: dict[int, list[dict[str, Any]]] = {15: [], 30: []}
     excluded: dict[int, int] = {15: 0, 30: 0}
@@ -109,16 +125,10 @@ def main() -> None:
             raise RuntimeError(f"No future bars for {cycle_str}")
         candidates = sorted({row["ticker"] for row in samples if row["cycle"] == cycle_str} | {"SPY"})
         for ticker in candidates:
-            series = bars15 if interval == 15 else bars30
-            past = [
-                row
-                for (sym, day), rows in series.items()
-                if sym == ticker and day <= et_cycle.date()
-                for row in rows
-                if datetime.fromisoformat(row["ts"]).replace(tzinfo=ET) < et_cycle
-            ]
-            past.sort(key=lambda row: row["ts"])
-            history = past[-a.lookback :]
+            rows = by_symbol[interval].get(ticker, [])
+            timeline = times_by_symbol[interval].get(ticker, [])
+            index = bisect_left(timeline, et_cycle)
+            history = rows[max(0, index - a.lookback) : index]
             if len(history) != a.lookback:
                 excluded[interval] += 1
                 continue

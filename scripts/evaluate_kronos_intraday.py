@@ -40,13 +40,14 @@ def main() -> None:
     ap.add_argument("--output", type=Path, required=True)
     a = ap.parse_args()
     jobs: list[dict[str, Any]] = json.loads(a.inputs.read_text())
+    bootstrap_block_cycles = 5 * len({int(job["interval_minutes"]) for job in jobs})
     forecasts = json.loads(a.forecasts.read_text())
     if not forecasts["complete"]:
         raise ValueError("Intraday forecast set is incomplete")
     forecast_by_cycle_ticker = {(f["ticker"], f["cycle"]): f for f in forecasts["forecasts"]}
 
     tickers = sorted({job["ticker"] for job in jobs})
-    daily = BarStore(Path("data"), "1Day_raw").read(tickers).sort("ts")
+    daily = BarStore(Path("data"), "1Day_all").read(tickers).sort("ts")
     daily_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in daily.iter_rows(named=True):
         daily_rows[row["symbol"]].append({**row, "session": row["ts"].date()})
@@ -63,33 +64,40 @@ def main() -> None:
             .iter_rows(named=True)
         )
     }
+    job_by_cycle_ticker = {(job["ticker"], job["cycle"]): job for job in jobs}
     output = []
     invalid = 0
+    insufficient_history = 0
+    missing_labels = 0
     for job in jobs:
         if job["ticker"] == "SPY":
             continue
         key = (job["ticker"], job["cycle"])
         fc = forecast_by_cycle_ticker.get(key)
+        spy_job = job_by_cycle_ticker.get(("SPY", job["cycle"]))
         spy_fc = forecast_by_cycle_ticker.get(("SPY", job["cycle"]))
-        if not fc or not spy_fc or fc.get("status") != "ok" or spy_fc.get("status") != "ok":
+        if not fc or fc.get("status") != "ok" or not spy_job or not spy_fc or spy_fc.get("status") != "ok":
             invalid += 1
             continue
         ticker, session = job["ticker"], date.fromisoformat(job["session"])
         target = date.fromisoformat(job["target_session"])
         history = daily_rows[ticker]
         prior = [row for row in history if row["session"] < session]
-        if len(prior) < 252:
+        if len(prior) < 400:
+            insufficient_history += 1
             continue
         prev = prior[-1]
         ref = float(job["history"][-1]["close"])
-        spy_job = next(x for x in jobs if x["ticker"] == "SPY" and x["cycle"] == job["cycle"])
-        spy_ref = float(spy_job["history"][-1]["close"])
         actual_close = close_by_session.get((ticker, target))
         spy_close = close_by_session.get(("SPY", target))
         if actual_close is None or spy_close is None:
+            missing_labels += 1
             continue
         actual = actual_close / ref - 1
+        spy_ref = float(spy_job["history"][-1]["close"])
         spy_actual = spy_close / spy_ref - 1
+        forecast_return = float(fc["mean_return"])
+        spy_forecast_return = float(spy_fc["mean_return"])
         past_close = np.asarray([float(row["close"]) for row in prior])
         true_ranges = []
         for idx in range(-14, 0):
@@ -103,8 +111,7 @@ def main() -> None:
                 )
             )
         ticker_session_row = next((row for row in daily_rows[ticker] if row["session"] == session), None)
-        spy_prev_row = next((row for row in daily_rows["SPY"] if row["session"] == prev["session"]), None)
-        if ticker_session_row is None or spy_prev_row is None:
+        if ticker_session_row is None:
             continue
         realized_prices = [ref]
         for day_row in [row for row in daily_rows[ticker] if session <= row["session"] <= target]:
@@ -116,7 +123,6 @@ def main() -> None:
         if len(realized_prices) < 2:
             continue
         realized_vol = float(np.std(np.diff(np.log(realized_prices)), ddof=1))
-        spy_prev_close = float(spy_prev_row["close"])
         output.append(
             {
                 "ticker": ticker,
@@ -124,9 +130,12 @@ def main() -> None:
                 "cycle": job["cycle"],
                 "interval_minutes": job["interval_minutes"],
                 "target_session": str(target),
+                "actual_return": actual,
+                "forecast_return": forecast_return,
                 "actual_excess": actual - spy_actual,
-                "forecast_excess": float(fc["mean_return"]) - float(spy_fc["mean_return"]),
-                "forecast_return": float(fc["mean_return"]),
+                "forecast_excess": forecast_return - spy_forecast_return,
+                "spy_actual_return": spy_actual,
+                "spy_forecast_return": spy_forecast_return,
                 "forecast_dispersion": float(fc["return_std"]),
                 "realized_vol": realized_vol,
                 "atr14": float(np.mean(true_ranges) / float(prev["close"])),
@@ -134,7 +143,6 @@ def main() -> None:
                 "momentum12_1": past_close[-22] / past_close[-252] - 1,
                 "below_ma400": -(past_close[-1] / np.mean(past_close[-400:]) - 1),
                 "current_day_return": ref / float(prev["close"]) - 1,
-                "current_day_vs_spy": (ref / float(prev["close"]) - 1) - (spy_ref / spy_prev_close - 1),
                 "open_gap": float(ticker_session_row["open"]) / float(prev["close"]) - 1,
                 "intraday_return_to_cycle": ref / float(ticker_session_row["open"]) - 1,
             }
@@ -144,18 +152,17 @@ def main() -> None:
     for row in output:
         groups[row["cycle"]].append(row)
     features = [
-        "forecast_excess",
+        "forecast_return",
         "reversal20",
         "momentum12_1",
         "below_ma400",
         "current_day_return",
-        "current_day_vs_spy",
         "open_gap",
         "intraday_return_to_cycle",
     ]
     metrics: dict[str, dict[str, Any]] = {}
     for feature in [*features, "forecast_dispersion", "atr14"]:
-        corr_target = "realized_vol" if feature in {"forecast_dispersion", "atr14"} else "actual_excess"
+        corr_target = "realized_vol" if feature in {"forecast_dispersion", "atr14"} else "actual_return"
         values = []
         for cycle, rows in sorted(groups.items()):
             if len(rows) < 6:
@@ -170,16 +177,42 @@ def main() -> None:
             "mean_cycle_rank_ic": float(np.mean(ic)) if ic else None,
             "median_cycle_rank_ic": float(np.median(ic)) if ic else None,
             "positive_cycle_fraction": float(np.mean(np.asarray(ic) > 0)) if ic else None,
-            "block5_bootstrap_95pct_ci": block_ci(ic),
+            "block5_bootstrap_95pct_ci": block_ci(ic, block=bootstrap_block_cycles),
             "first_half_mean_ic": float(np.mean(ic[:midpoint])) if midpoint else None,
             "second_half_mean_ic": float(np.mean(ic[midpoint:])) if midpoint else None,
             "cycles": len(ic),
         }
 
+    # A common SPY return is constant across a cycle, so raw-return and
+    # SPY-relative cross-sectional rank ICs must match within floating error.
+    excess_ics: list[float] = []
+    rank_ic_differences: list[float] = []
+    for _, rows in sorted(groups.items()):
+        if len(rows) < 6:
+            continue
+        raw_corr = spearmanr([r["forecast_return"] for r in rows], [r["actual_return"] for r in rows]).statistic
+        excess_corr = spearmanr([r["forecast_excess"] for r in rows], [r["actual_excess"] for r in rows]).statistic
+        if np.isfinite(raw_corr) and np.isfinite(excess_corr):
+            excess_ics.append(float(excess_corr))
+            rank_ic_differences.append(float(abs(raw_corr - excess_corr)))
+    metrics["forecast_excess"] = {
+        "mean_cycle_rank_ic": float(np.mean(excess_ics)) if excess_ics else None,
+        "median_cycle_rank_ic": float(np.median(excess_ics)) if excess_ics else None,
+        "positive_cycle_fraction": float(np.mean(np.asarray(excess_ics) > 0)) if excess_ics else None,
+        "block5_bootstrap_95pct_ci": block_ci(excess_ics, block=bootstrap_block_cycles),
+        "first_half_mean_ic": float(np.mean(excess_ics[: len(excess_ics) // 2])) if len(excess_ics) >= 2 else None,
+        "second_half_mean_ic": float(np.mean(excess_ics[len(excess_ics) // 2 :])) if len(excess_ics) >= 2 else None,
+        "cycles": len(excess_ics),
+    }
+    rank_invariance = {
+        "cycles_compared": len(rank_ic_differences),
+        "max_abs_raw_vs_spy_relative_rank_ic_difference": max(rank_ic_differences, default=None),
+    }
+
     # Partial out cheap price context on each date, then test whether the
     # forecast still ranks residual returns. This is diagnostic, not a model.
     residual_ics: list[float] = []
-    controls = ["reversal20", "below_ma400", "current_day_vs_spy", "open_gap"]
+    controls = ["reversal20", "below_ma400", "current_day_return", "open_gap"]
     for _, rows in sorted(groups.items()):
         if len(rows) < len(controls) + 4:
             continue
@@ -196,33 +229,61 @@ def main() -> None:
         "mean_cycle_rank_ic": float(np.mean(residual_ics)) if residual_ics else None,
         "median_cycle_rank_ic": float(np.median(residual_ics)) if residual_ics else None,
         "positive_cycle_fraction": float(np.mean(np.asarray(residual_ics) > 0)) if residual_ics else None,
-        "block5_bootstrap_95pct_ci": block_ci(residual_ics),
+        "block5_bootstrap_95pct_ci": block_ci(residual_ics, block=bootstrap_block_cycles),
         "first_half_mean_ic": float(np.mean(residual_ics[:residual_midpoint])) if residual_midpoint else None,
         "second_half_mean_ic": float(np.mean(residual_ics[residual_midpoint:])) if residual_midpoint else None,
         "cycles": len(residual_ics),
     }
 
+    predicted_excess = np.asarray([float(row["forecast_excess"]) for row in output])
+    realized_excess = np.asarray([float(row["actual_excess"]) for row in output])
+    zero_baseline_mae = float(np.mean(np.abs(realized_excess))) if len(output) else None
+    forecast_mae = float(np.mean(np.abs(predicted_excess - realized_excess))) if len(output) else None
+    absolute_market_adjusted = {
+        "samples": len(output),
+        "mean_forecast_excess": float(np.mean(predicted_excess)) if len(output) else None,
+        "mean_realized_excess": float(np.mean(realized_excess)) if len(output) else None,
+        "mean_absolute_error": forecast_mae,
+        "zero_forecast_baseline_mae": zero_baseline_mae,
+        "mae_skill_vs_zero_baseline": (
+            1.0 - forecast_mae / zero_baseline_mae
+            if forecast_mae is not None and zero_baseline_mae
+            else None
+        ),
+        "directional_accuracy": (
+            float(np.mean(np.sign(predicted_excess) == np.sign(realized_excess))) if len(output) else None
+        ),
+    }
+
     limitations = [
         "Kronos inputs include completed intraday bars through each news-decision time; "
         "15m data is used at 09:45 and 30m at the afternoon cycle.",
-        "Returns run from the decision-bar close to the close five sessions later, "
-        "with simple SPY subtraction (beta=1).",
-        "Within a date, subtracting the same SPY return from every ticker cannot change rank IC. "
-        "Interpret rank metrics as stock-return ranking; market adjustment matters for absolute "
-        "forecasts and thresholds.",
-        "The 23-name watchlist, overlapping outcomes and candidate-only news cycles "
-        "limit inference; no thresholds were optimized.",
+        "Both raw and SPY-relative stock returns are reported. Subtracting one common SPY value "
+        "per date cannot change cross-sectional rank IC, though paired SPY forecasts are retained "
+        "for absolute market-relative thresholds and future portfolio decisions.",
+        "The point-in-time candidate universe uses a current asset snapshot, so it has survivorship "
+        "bias and is not a complete historical listing universe. Outcomes overlap; no thresholds "
+        "were optimized. Rows with fewer than 400 prior daily sessions are omitted to keep the "
+        "400-session moving-average control comparable.",
+        "Alpaca all-adjusted bars are used for model inputs and labels, so outcomes are adjusted "
+        "returns rather than raw spot-price returns or executable fills. They cannot stand in for "
+        "historical option-contract pricing.",
         "Forecast paths and prices are vendor bars, not executable fills or quoted spreads.",
     ]
     report = {
         "status": "EXPLORATORY",
         "samples": len(output),
         "invalid_samples": invalid,
+        "excluded_insufficient_400_session_history": insufficient_history,
+        "excluded_missing_five_session_label": missing_labels,
         "decision_cycles": len(groups),
+        "bootstrap_block_cycles": bootstrap_block_cycles,
         "by_interval": {
             str(interval): sum(row["interval_minutes"] == interval for row in output) for interval in [15, 30]
         },
         "metrics": metrics,
+        "absolute_market_adjusted_forecasts": absolute_market_adjusted,
+        "spy_rank_invariance": rank_invariance,
         "limitations": limitations,
     }
     atomic_text(a.output, json.dumps(report, indent=2, allow_nan=False) + "\n")
@@ -232,7 +293,11 @@ def main() -> None:
         "**EXPLORATORY**",
         "",
         f"{len(output)} valid ticker-cycle samples; {len(groups)} decision cycles; "
-        f"{invalid} invalid/missing model comparisons.",
+        f"{invalid} invalid/missing model comparisons; {insufficient_history} excluded for fewer than "
+        f"400 prior daily sessions; {missing_labels} missing five-session labels.",
+        "Paired SPY subtraction changed rank IC by at most "
+        f"{rank_invariance['max_abs_raw_vs_spy_relative_rank_ic_difference'] or 0:.3g} "
+        "across evaluated cycles.",
         "",
         "| Feature | Mean cycle rank IC | Median IC | Positive cycles | 5-session block CI | First/second half |",
         "|---|---:|---:|---:|---:|---:|",
@@ -245,6 +310,19 @@ def main() -> None:
             f"| {feature} | {m['mean_cycle_rank_ic']:+.3f} | {m['median_cycle_rank_ic']:+.3f} | "
             f"{m['positive_cycle_fraction']:.0%} | {ci_s} | {half_text} |"
         )
+    lines.extend(
+        [
+            "",
+            "## Absolute SPY-relative forecasts",
+            "",
+            f"Mean forecast excess: {absolute_market_adjusted['mean_forecast_excess']:+.3%}; "
+            f"mean realized excess: {absolute_market_adjusted['mean_realized_excess']:+.3%}; "
+            f"MAE: {absolute_market_adjusted['mean_absolute_error']:.3%}; "
+            f"zero-forecast MAE: {absolute_market_adjusted['zero_forecast_baseline_mae']:.3%}; "
+            f"directional accuracy: {absolute_market_adjusted['directional_accuracy']:.1%}.",
+            "These fixed summaries use no tuned buy threshold and do not include transaction costs.",
+        ]
+    )
     lines.extend(["", "## Limitations", "", *[f"- {x}" for x in limitations]])
     atomic_text(a.output.with_suffix(".md"), "\n".join(lines) + "\n")
     print("\n".join(lines), flush=True)

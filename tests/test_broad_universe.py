@@ -1,4 +1,8 @@
-from ws.universe import listed_stock_candidates
+from datetime import date, datetime, timedelta
+
+import polars as pl
+
+from ws.universe import listed_stock_candidates, point_in_time_top_n
 
 
 def test_listed_stock_filter_keeps_common_shares_and_drops_obvious_non_stocks() -> None:
@@ -31,3 +35,19 @@ def test_listed_stock_filter_prefers_active_duplicate_metadata() -> None:
 
     assert len(result) == 1
     assert result[0]["name"] == "Current Name"
+
+
+def test_point_in_time_top_n_uses_only_prior_twenty_sessions() -> None:
+    start = datetime(2024, 1, 1)
+    rows = []
+    for day in range(21):
+        rows.extend(
+            [
+                {"symbol": "AAA", "ts": start + timedelta(days=day), "close": 10.0, "volume": 10_000_000.0},
+                {"symbol": "BBB", "ts": start + timedelta(days=day), "close": 10.0, "volume": 5_000_000.0},
+            ]
+        )
+    # BBB spikes on the selection date; a point-in-time screen must ignore today's volume.
+    rows[-1]["volume"] = 100_000_000.0
+    selected = point_in_time_top_n(pl.DataFrame(rows), ["AAA", "BBB"], date(2024, 1, 21), date(2024, 1, 22), n=1)
+    assert selected.select("symbol").to_series().to_list() == ["AAA"]

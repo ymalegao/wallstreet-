@@ -8,6 +8,7 @@ A ticker is eligible on session t if, using only sessions before t, its last clo
 from __future__ import annotations
 
 import re
+from datetime import date
 from typing import Any
 
 import polars as pl
@@ -96,3 +97,41 @@ def eligibility(daily: pl.DataFrame) -> pl.DataFrame:
 def ever_eligible(daily: pl.DataFrame) -> list[str]:
     e = eligibility(daily)
     return sorted(e.filter(pl.col("eligible"))["symbol"].unique().to_list())
+
+
+def point_in_time_top_n(
+    daily: pl.DataFrame,
+    candidate_symbols: list[str],
+    start: date,
+    end: date,
+    n: int = 25,
+) -> pl.DataFrame:
+    """Select the most liquid eligible stocks per session using only prior daily bars.
+
+    Dates use a half-open ``[start, end)`` interval. Caller supplies a broad stock-only
+    candidate pool; the returned rank is point-in-time with respect to price and liquidity.
+    """
+    if n < 1:
+        raise ValueError("n must be positive")
+    if not candidate_symbols:
+        raise ValueError("candidate_symbols cannot be empty")
+    d = daily.filter(pl.col("symbol").is_in(candidate_symbols)).sort("symbol", "ts")
+    d = d.with_columns(session=pl.col("ts").dt.date(), dv=pl.col("close") * pl.col("volume"))
+    d = d.with_columns(
+        prev_close=pl.col("close").shift(1).over("symbol"),
+        med_dv=pl.col("dv").rolling_median(WINDOW, min_samples=WINDOW).shift(1).over("symbol"),
+    )
+    selected = (
+        d.filter(
+            (pl.col("session") >= start)
+            & (pl.col("session") < end)
+            & (pl.col("prev_close") >= MIN_PRICE)
+            & (pl.col("med_dv") >= MIN_DOLLAR_VOLUME)
+        )
+        .sort(["session", "med_dv", "symbol"], descending=[False, True, False])
+        .group_by("session", maintain_order=True)
+        .head(n)
+        .select("session", "symbol", "prev_close", "med_dv")
+        .sort("session", "med_dv", "symbol", descending=[False, True, False])
+    )
+    return selected

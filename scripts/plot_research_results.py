@@ -302,6 +302,100 @@ def intraday_svg(out: Path) -> None:
     out.write_text("\n".join(parts) + "\n")
 
 
+def kronos_pit_svg(out: Path) -> None:
+    reports = [
+        ("Morning / 15m", json.loads(Path("docs/kronos-pit-2024-2026-15m-report.json").read_text())),
+        ("Afternoon / 30m", json.loads(Path("docs/kronos-pit-2024-2026-30m-report.json").read_text())),
+    ]
+    width, height = 1080, 560
+    left, right, top, bottom = 105, 1010, 105, 420
+    lo, hi = -0.3, 0.4
+
+    def ymap(v: float) -> float:
+        return bottom - (v - lo) / (hi - lo) * (bottom - top)
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        '<rect width="100%" height="100%" fill="white"/>',
+        text(width / 2, 36, "Kronos across the July 2024–June 2026 PIT sample", 22, "middle"),
+        text(
+            width / 2,
+            62,
+            "Mean per-cycle rank IC for five-session returns; error bars are 5-session block-bootstrap 95% intervals",
+            13,
+            "middle",
+            "#555",
+        ),
+    ]
+    for tick in np_ticks(lo, hi, 0.1):
+        y = ymap(tick)
+        parts.append(line(left, y, right, y, "#e5e5e5"))
+        parts.append(text(left - 10, y + 4, f"{tick:+.1f}", 11, "end", "#666"))
+    zero = ymap(0)
+    parts.append(line(left, zero, right, zero, "#555", 1.5))
+
+    features = [
+        ("forecast_excess", "Kronos, SPY-relative", "#247ba0"),
+        ("reversal20", "20-day reversal", "#f18f01"),
+        ("forecast_excess_after_price_controls", "Kronos after controls", "#8e5ea2"),
+    ]
+    group_width = (right - left) / len(reports)
+    slot = group_width / len(features)
+    bar_width = 54
+    for j, (label, report) in enumerate(reports):
+        center = left + group_width * (j + 0.5)
+        parts.append(text(center, bottom + 32, label, 14, "middle"))
+        parts.append(
+            text(
+                center,
+                bottom + 51,
+                f"n={report['samples']:,}; {report['decision_cycles']:,} cycles",
+                11,
+                "middle",
+                "#555",
+            )
+        )
+        for i, (feature, _, color) in enumerate(features):
+            metric = report["metrics"][feature]
+            value = float(metric["mean_cycle_rank_ic"])
+            ci = metric["block5_bootstrap_95pct_ci"]
+            x = center + (i - 1) * slot
+            yv = ymap(value)
+            parts.append(
+                f'<rect x="{x - bar_width / 2:.1f}" y="{min(yv, zero):.1f}" '
+                f'width="{bar_width}" height="{max(1, abs(zero - yv)):.1f}" '
+                f'fill="{color}" opacity="0.86"/>'
+            )
+            if ci[0] is not None and ci[1] is not None:
+                low_ci, high_ci = ymap(float(ci[0])), ymap(float(ci[1]))
+                parts.extend(
+                    [
+                        line(x, low_ci, x, high_ci, "#222", 1.5),
+                        line(x - 7, low_ci, x + 7, low_ci, "#222", 1.5),
+                        line(x - 7, high_ci, x + 7, high_ci, "#222", 1.5),
+                    ]
+                )
+            parts.append(text(x, yv - 8 if value >= 0 else yv + 18, f"{value:+.3f}", 11, "middle"))
+
+    legend_x = 155
+    for i, (_, label, color) in enumerate(features):
+        x = legend_x + i * 285
+        parts.append(f'<rect x="{x}" y="492" width="16" height="12" fill="{color}"/>')
+        parts.append(text(x + 23, 503, label, 12))
+    parts.append(
+        text(
+            width / 2,
+            535,
+            "Exploratory feature test, not a portfolio backtest; current asset snapshot leaves survivorship bias.",
+            12,
+            "middle",
+            "#555",
+        )
+    )
+    parts.append("</svg>")
+    out.write_text("\n".join(parts) + "\n")
+
+
 def np_ticks(lo: float, hi: float, step: float) -> list[float]:
     count = round((hi - lo) / step)
     return [lo + i * step for i in range(count + 1)]
@@ -311,6 +405,7 @@ def main() -> None:
     replay_svg(Path("docs/broad-replay-visual.svg"))
     kronos_svg(Path("docs/kronos-feature-visual.svg"))
     intraday_svg(Path("docs/kronos-intraday-visual.svg"))
+    kronos_pit_svg(Path("docs/kronos-pit-2024-2026-visual.svg"))
     print("Wrote replay and Kronos daily/intraday SVG charts")
 
 
