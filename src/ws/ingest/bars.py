@@ -23,6 +23,7 @@ def make_client(key: str, secret: str) -> RateLimitedClient:
 
 
 def _iter_pages(client: RateLimitedClient, path: str, params: dict[str, Any]) -> Iterator[Bar]:
+    seen_tokens: set[str] = set()
     while True:
         page = client.get_json(path, params)
         for symbol, rows in (page.get("bars") or {}).items():
@@ -41,6 +42,9 @@ def _iter_pages(client: RateLimitedClient, path: str, params: dict[str, Any]) ->
         token = page.get("next_page_token")
         if not token:
             return
+        if token in seen_tokens:
+            raise RuntimeError("Alpaca bars repeated a pagination token")
+        seen_tokens.add(token)
         params["page_token"] = token
 
 

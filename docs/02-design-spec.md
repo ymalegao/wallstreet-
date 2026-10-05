@@ -157,8 +157,8 @@ v1 is done when it runs unattended on the Spark for 2 weeks of paper trading **a
 | M | Deliverable | Exit criterion |
 |---|---|---|
 | **M0** ✅ | Repo, config, CI (ruff, mypy, pytest), Dockerfile | CI green |
-| **M1** 🟡 | Ingestion, raw archive, event store, near-dup detection, labels, PIT universe, **API probe**, backfill, data-quality report | **Code built and tested. Pending:** probe run + backfill on the Spark, then `dq_report.py` PASS (zero timestamp violations; ≥ 95% of eligible ticker-months have news) |
-| **M2** | Model serving on the Spark (vLLM + JEV-9B, Kronos), memorization probe → measured JEV-9B clean window | Clean window fixed in config |
+| **M1** 🟡 | Ingestion, raw archive, event store, near-dup detection, labels, PIT universe, **API probe**, backfill, data-quality report | **Code built and tested, milestone incomplete.** Pending market-session latency/dedupe probes, required backfills on the Spark, then `dq_report.py` PASS (zero timestamp violations; ≥ 95% of eligible ticker-months have news). Current exploratory caches/reports do not pass this gate. |
+| **M2** 🟡 | Model serving on the Spark (vLLM + JEV-9B, Kronos), memorization probe → measured JEV-9B clean window | Local inference has been exercised; the memorization probe is not implemented/run. No JEV clean window is fixed in config. |
 | **M3** | **v1 end to end**: scoring rule, governor, backtester (same governor code), random-entry and SPY baselines, tearsheet | G1/G2 report produced on the clean window (pass or fail, both are information) |
 | **M4** | v1 on Alpaca paper, unattended, with dashboard and alerts | 2 weeks unattended; then G4 accumulation begins |
 | **M5+** | Upgrades, **one at a time**, each vs. the frozen v1 eval (§7) | Beats previous version on the holdout and Deflated Sharpe |

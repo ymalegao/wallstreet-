@@ -1,0 +1,34 @@
+# Data quality report
+
+**Result: EXPLORATORY**
+
+## Metrics
+
+```json
+{
+  "events": 8225,
+  "sources": {
+    "alpaca_news": 8225
+  },
+  "duplicate_ids": 0,
+  "acausal_timestamps": 0,
+  "revised_articles": 1021,
+  "revisions_used_early": 0,
+  "outside_clock_hours_fraction": 0.5452887537993921,
+  "eligible_ticker_months": 62037,
+  "eligible_ticker_months_in_manifest": 92,
+  "news_ticker_month_coverage": 1.0,
+  "intraday_bars": 135953,
+  "regular_hours_bars": 56394,
+  "normalization_rejects": 0
+}
+```
+
+## Failures
+
+
+## Limitations
+
+- unverified dedupe.jaccard_threshold
+- unverified latency.news_minutes
+- Symbol coverage is limited to the declared sample, not a survivorship-free market universe

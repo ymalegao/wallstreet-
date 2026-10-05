@@ -1,21 +1,17 @@
-# Data-source assumptions that MUST be measured, not assumed.
-# Fill each value from docs/data-probe-report.md (scripts/probe_apis.py). Code that depends on a
-# value refuses to run while it is UNVERIFIED.
-
 edgar:
-  # Timezone of `acceptanceDateTime` in data.sec.gov submissions JSON: utc | et
-  acceptance_tz: UNVERIFIED
-
+  acceptance_tz: utc
 dedupe:
-  # Exact 5-shingle Jaccard on headline+summary above which two items are the same article.
   jaccard_threshold: UNVERIFIED
   window_hours: 48
-
 latency:
-  # p95 of (our receipt - vendor created_at) on the live news WebSocket, plus processing margin.
-  # Added to vendor timestamps in backtests so historical items are not acted on sooner than live ones.
   news_minutes: UNVERIFIED
-
 bars:
-  # Feed the free plan serves for history: sip | iex
-  feed: UNVERIFIED
+  feed: sip
+verification:
+  date: '2026-10-04'
+  report: docs/data-probe-report.md
+  edgar: UTC matched five public filing headers using corrected SGML parser; dissemination
+    delay still unverified
+  bars: Historical SIP access and split adjustment verified on live API
+  latency: Pending market-session observations
+  finnhub: Cross-source 240-minute offsets unresolved; excluded from replay by default

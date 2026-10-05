@@ -230,7 +230,7 @@ def probe_bars(r: Report, key: str, secret: str) -> None:
 
 # --------------------------------------------------------------------------- EDGAR
 
-_HDR = re.compile(r"ACCEPTANCE-DATETIME:\s*(\d{14})")
+_HDR = re.compile(r"(?:<ACCEPTANCE-DATETIME>|ACCEPTANCE-DATETIME:)\s*(\d{14})")
 
 
 def probe_edgar(r: Report, user_agent: str) -> None:
@@ -246,7 +246,7 @@ def probe_edgar(r: Report, user_agent: str) -> None:
     save("edgar_aapl_rows", rows[:50])
     for f in ("acceptanceDateTime", "items", "primaryDocument", "accessionNumber"):
         r.check("PASS" if all(f in x for x in rows) else "FAIL", f"field `{f}` present", f"{len(rows)} 8-K/4 rows")
-    verdicts = Counter()
+    verdicts: Counter[str] = Counter()
     for row in [x for x in rows if x["form"] == "8-K"][:5]:
         acc = row["accessionNumber"]
         url = f"https://www.sec.gov/Archives/edgar/data/{row['cik']}/{acc.replace('-', '')}/{acc}-index-headers.html"
@@ -311,8 +311,8 @@ def probe_similarity(r: Report, key: str, secret: str, fh: dict[str, list[dict[s
     }
     for i in range(len(docs)):
         for j in range(i + 1, len(docs)):
-            a, b = docs[i], docs[j]
-            if a[0] == b[0] or a[1] != b[1] or abs((a[2] - b[2]).total_seconds()) > 48 * 3600:
+            left, right = docs[i], docs[j]
+            if left[0] == right[0] or left[1] != right[1] or abs((left[2] - right[2]).total_seconds()) > 48 * 3600:
                 continue
             s = jaccard(sh[i], sh[j])
             key_ = list(bands)[min(int(s / 0.2), 4)]
@@ -324,11 +324,14 @@ def probe_similarity(r: Report, key: str, secret: str, fh: dict[str, list[dict[s
         if k == "0.0-0.2":
             continue
         for s, i, j in sorted(v, reverse=True)[:3]:
-            a, b = docs[i], docs[j]
-            lead = "alpaca" if a[2] < b[2] else "finnhub"
-            r.text(f"- [{k}] J={s:.2f} ({a[1]}, {lead} first by {abs((a[2] - b[2]).total_seconds()) / 60:.0f} min)")
-            r.text(f"  - {a[0]}: {a[3][:160]}")
-            r.text(f"  - {b[0]}: {b[3][:160]}")
+            left, right = docs[i], docs[j]
+            lead = "alpaca" if left[2] < right[2] else "finnhub"
+            r.text(
+                f"- [{k}] J={s:.2f} ({left[1]}, {lead} first by "
+                f"{abs((left[2] - right[2]).total_seconds()) / 60:.0f} min)"
+            )
+            r.text(f"  - {left[0]}: {left[3][:160]}")
+            r.text(f"  - {right[0]}: {right[3][:160]}")
 
 
 def main() -> None:
@@ -357,8 +360,11 @@ def main() -> None:
     if st.alpaca_key and st.alpaca_secret and fh:
         r.guard("similarity", lambda: probe_similarity(r, st.alpaca_key, st.alpaca_secret, fh))
     r.lines.insert(2, f"\n**Summary:** {dict(r.status)}\n")
+    Path("docs").mkdir(parents=True, exist_ok=True)
     Path("docs/data-probe-report.md").write_text("\n".join(r.lines) + "\n")
     print(f"\nwrote docs/data-probe-report.md  {dict(r.status)}")
+    if r.status["FAIL"]:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

@@ -5,7 +5,8 @@ Design: `docs/01-research-spec.md` (evidence, metrics, gates) and `docs/02-desig
 
 ## Status
 - **M0** (repo, CI) done.
-- **M1** (data layer) code is done and tested. Next step: run the API probe and backfill on the Spark.
+- **M1** data-layer code is built and tested, but the milestone is **not complete**. Still required: market-session API probe (news latency, SEC timing, dedupe threshold), the full required historical backfills, and a passing strict `dq_report.py` exit gate. Cached research data and exploratory DQ reports do not satisfy M1.
+- **M2** model inference has been exercised locally, but the required JEV memorization probe has **not been implemented or run**. No JEV clean evaluation window is established. See `docs/02-design-spec.md` §3.3 and §6.
 
 ## Run on the Spark (M1)
 ```bash

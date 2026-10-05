@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="540" viewBox="0 0 1000 540">
+<rect width="100%" height="100%" fill="white"/>
+<text x="500.0" y="38.0" font-size="23" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">Kronos at the decision time</text>
+<text x="500.0" y="63.0" font-size="13" text-anchor="middle" fill="#555" font-family="Arial, sans-serif">Mean cross-sectional rank correlation with five-session excess return; 5-session block-bootstrap intervals</text>
+<line x1="110.0" y1="415.0" x2="940.0" y2="415.0" stroke="#e5e5e5" stroke-width="1" />
+<text x="100.0" y="419.0" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">-0.3</text>
+<line x1="110.0" y1="371.4" x2="940.0" y2="371.4" stroke="#e5e5e5" stroke-width="1" />
+<text x="100.0" y="375.4" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">-0.2</text>
+<line x1="110.0" y1="327.9" x2="940.0" y2="327.9" stroke="#e5e5e5" stroke-width="1" />
+<text x="100.0" y="331.9" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">-0.1</text>
+<line x1="110.0" y1="284.3" x2="940.0" y2="284.3" stroke="#e5e5e5" stroke-width="1" />
+<text x="100.0" y="288.3" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">+0.0</text>
+<line x1="110.0" y1="240.7" x2="940.0" y2="240.7" stroke="#e5e5e5" stroke-width="1" />
+<text x="100.0" y="244.7" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">+0.1</text>
+<line x1="110.0" y1="197.1" x2="940.0" y2="197.1" stroke="#e5e5e5" stroke-width="1" />
+<text x="100.0" y="201.1" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">+0.2</text>
+<line x1="110.0" y1="153.6" x2="940.0" y2="153.6" stroke="#e5e5e5" stroke-width="1" />
+<text x="100.0" y="157.6" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">+0.3</text>
+<line x1="110.0" y1="110.0" x2="940.0" y2="110.0" stroke="#e5e5e5" stroke-width="1" />
+<text x="100.0" y="114.0" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">+0.4</text>
+<line x1="110.0" y1="284.3" x2="940.0" y2="284.3" stroke="#555" stroke-width="1.5" />
+<text x="317.5" y="448.0" font-size="14" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">09:45 / 15m</text>
+<text x="317.5" y="467.0" font-size="11" text-anchor="middle" fill="#555" font-family="Arial, sans-serif">n=1060; 61 dates</text>
+<rect x="187.5" y="185.8" width="60" height="98.5" fill="#247ba0" opacity="0.86"/>
+<line x1="217.5" y1="224.7" x2="217.5" y2="149.9" stroke="#222" stroke-width="1.5" />
+<line x1="210.5" y1="224.7" x2="224.5" y2="224.7" stroke="#222" stroke-width="1.5" />
+<line x1="210.5" y1="149.9" x2="224.5" y2="149.9" stroke="#222" stroke-width="1.5" />
+<text x="217.5" y="177.8" font-size="12" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">+0.226</text>
+<rect x="287.5" y="228.1" width="60" height="56.2" fill="#f18f01" opacity="0.86"/>
+<line x1="317.5" y1="262.7" x2="317.5" y2="195.9" stroke="#222" stroke-width="1.5" />
+<line x1="310.5" y1="262.7" x2="324.5" y2="262.7" stroke="#222" stroke-width="1.5" />
+<line x1="310.5" y1="195.9" x2="324.5" y2="195.9" stroke="#222" stroke-width="1.5" />
+<text x="317.5" y="220.1" font-size="12" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">+0.129</text>
+<rect x="387.5" y="255.7" width="60" height="28.6" fill="#8e5ea2" opacity="0.86"/>
+<line x1="417.5" y1="288.8" x2="417.5" y2="221.8" stroke="#222" stroke-width="1.5" />
+<line x1="410.5" y1="288.8" x2="424.5" y2="288.8" stroke="#222" stroke-width="1.5" />
+<line x1="410.5" y1="221.8" x2="424.5" y2="221.8" stroke="#222" stroke-width="1.5" />
+<text x="417.5" y="247.7" font-size="12" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">+0.066</text>
+<text x="732.5" y="448.0" font-size="14" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">Afternoon / 30m</text>
+<text x="732.5" y="467.0" font-size="11" text-anchor="middle" fill="#555" font-family="Arial, sans-serif">n=1034; 61 dates</text>
+<rect x="602.5" y="200.9" width="60" height="83.4" fill="#247ba0" opacity="0.86"/>
+<line x1="632.5" y1="246.7" x2="632.5" y2="158.3" stroke="#222" stroke-width="1.5" />
+<line x1="625.5" y1="246.7" x2="639.5" y2="246.7" stroke="#222" stroke-width="1.5" />
+<line x1="625.5" y1="158.3" x2="639.5" y2="158.3" stroke="#222" stroke-width="1.5" />
+<text x="632.5" y="192.9" font-size="12" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">+0.191</text>
+<rect x="702.5" y="241.7" width="60" height="42.6" fill="#f18f01" opacity="0.86"/>
+<line x1="732.5" y1="275.9" x2="732.5" y2="208.0" stroke="#222" stroke-width="1.5" />
+<line x1="725.5" y1="275.9" x2="739.5" y2="275.9" stroke="#222" stroke-width="1.5" />
+<line x1="725.5" y1="208.0" x2="739.5" y2="208.0" stroke="#222" stroke-width="1.5" />
+<text x="732.5" y="233.7" font-size="12" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">+0.098</text>
+<rect x="802.5" y="278.4" width="60" height="5.9" fill="#8e5ea2" opacity="0.86"/>
+<line x1="832.5" y1="315.8" x2="832.5" y2="241.3" stroke="#222" stroke-width="1.5" />
+<line x1="825.5" y1="315.8" x2="839.5" y2="315.8" stroke="#222" stroke-width="1.5" />
+<line x1="825.5" y1="241.3" x2="839.5" y2="241.3" stroke="#222" stroke-width="1.5" />
+<text x="832.5" y="270.4" font-size="12" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">+0.014</text>
+<text x="500.0" y="510.0" font-size="12" text-anchor="middle" fill="#555" font-family="Arial, sans-serif">Exploratory, overlapping five-session returns; selected 23-stock watchlist; not a trading backtest.</text>
+<text x="500.0" y="485.0" font-size="12" text-anchor="middle" fill="#555" font-family="Arial, sans-serif">Blue: Kronos · orange: 20-day reversal · purple: Kronos after price controls; bars show bootstrap intervals.</text>
+</svg>

@@ -1,0 +1,4 @@
+# Reuse the locally tested ARM/CUDA vLLM stack; no model weights are copied into this image.
+FROM vllm/vllm-openai:nightly-8a728663c1c3eeace834a95f5654fa653cc1998c
+RUN python3 -m pip install --no-cache-dir pandas==3.0.6 einops==0.8.1
+ENTRYPOINT ["python3"]

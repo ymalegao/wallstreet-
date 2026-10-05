@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -40,7 +40,7 @@ class Event(BaseModel):
     def _aware_utc(cls, v: datetime | None) -> datetime | None:
         if v is not None and (v.tzinfo is None or v.utcoffset() is None):
             raise ValueError("timestamps must be timezone-aware")
-        return v
+        return v.astimezone(UTC) if v is not None else None
 
     @field_validator("tickers")
     @classmethod
@@ -71,3 +71,10 @@ class Bar(BaseModel):
     volume: float
     vwap: float | None = None
     trade_count: int | None = None
+
+    @field_validator("ts")
+    @classmethod
+    def _bar_time(cls, v: datetime) -> datetime:
+        if v.tzinfo is None or v.utcoffset() is None:
+            raise ValueError("bar timestamps must be timezone-aware")
+        return v.astimezone(UTC)

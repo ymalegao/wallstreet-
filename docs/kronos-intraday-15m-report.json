@@ -1,0 +1,151 @@
+{
+  "status": "EXPLORATORY",
+  "samples": 1060,
+  "invalid_samples": 0,
+  "decision_cycles": 61,
+  "by_interval": {
+    "15": 1060,
+    "30": 0
+  },
+  "metrics": {
+    "forecast_excess": {
+      "mean_cycle_rank_ic": 0.22599383217763533,
+      "median_cycle_rank_ic": 0.31127819548872177,
+      "positive_cycle_fraction": 0.7543859649122807,
+      "block5_bootstrap_95pct_ci": [
+        0.13674584989223654,
+        0.3084434446363117
+      ],
+      "first_half_mean_ic": 0.24905884602644884,
+      "second_half_mean_ic": 0.20372416363395335,
+      "cycles": 57
+    },
+    "reversal20": {
+      "mean_cycle_rank_ic": 0.12898951391700292,
+      "median_cycle_rank_ic": 0.1928571428571428,
+      "positive_cycle_fraction": 0.631578947368421,
+      "block5_bootstrap_95pct_ci": [
+        0.049601809914055314,
+        0.2029530436996423
+      ],
+      "first_half_mean_ic": 0.11469888194512258,
+      "second_half_mean_ic": 0.1427873654760598,
+      "cycles": 57
+    },
+    "momentum12_1": {
+      "mean_cycle_rank_ic": -0.043488792633325765,
+      "median_cycle_rank_ic": -0.028571428571428564,
+      "positive_cycle_fraction": 0.47368421052631576,
+      "block5_bootstrap_95pct_ci": [
+        -0.22818410027907746,
+        0.1306316691293065
+      ],
+      "first_half_mean_ic": -0.1632297057579013,
+      "second_half_mean_ic": 0.07212312348695395,
+      "cycles": 57
+    },
+    "below_ma400": {
+      "mean_cycle_rank_ic": 0.05706367845034948,
+      "median_cycle_rank_ic": 0.08214285714285713,
+      "positive_cycle_fraction": 0.543859649122807,
+      "block5_bootstrap_95pct_ci": [
+        -0.117680096255744,
+        0.23739457971554273
+      ],
+      "first_half_mean_ic": 0.15802835488262287,
+      "second_half_mean_ic": -0.040419457415293854,
+      "cycles": 57
+    },
+    "current_day_return": {
+      "mean_cycle_rank_ic": -0.13393234370503396,
+      "median_cycle_rank_ic": -0.175,
+      "positive_cycle_fraction": 0.3333333333333333,
+      "block5_bootstrap_95pct_ci": [
+        -0.21079109906397264,
+        -0.05705027542886022
+      ],
+      "first_half_mean_ic": -0.152377242763134,
+      "second_half_mean_ic": -0.11612347564893741,
+      "cycles": 57
+    },
+    "current_day_vs_spy": {
+      "mean_cycle_rank_ic": -0.13393234370503396,
+      "median_cycle_rank_ic": -0.175,
+      "positive_cycle_fraction": 0.3333333333333333,
+      "block5_bootstrap_95pct_ci": [
+        -0.21079109906397264,
+        -0.05705027542886022
+      ],
+      "first_half_mean_ic": -0.152377242763134,
+      "second_half_mean_ic": -0.11612347564893741,
+      "cycles": 57
+    },
+    "open_gap": {
+      "mean_cycle_rank_ic": -0.07843926030336329,
+      "median_cycle_rank_ic": -0.125,
+      "positive_cycle_fraction": 0.43859649122807015,
+      "block5_bootstrap_95pct_ci": [
+        -0.16584912018032844,
+        0.010074817807525175
+      ],
+      "first_half_mean_ic": -0.055980298818091835,
+      "second_half_mean_ic": -0.10012377484086678,
+      "cycles": 57
+    },
+    "intraday_return_to_cycle": {
+      "mean_cycle_rank_ic": -0.03462441094834773,
+      "median_cycle_rank_ic": 0.01098901098901099,
+      "positive_cycle_fraction": 0.5263157894736842,
+      "block5_bootstrap_95pct_ci": [
+        -0.1226701916391504,
+        0.04139045354144345
+      ],
+      "first_half_mean_ic": -0.06705829460970993,
+      "second_half_mean_ic": -0.003308937068411827,
+      "cycles": 57
+    },
+    "forecast_dispersion": {
+      "mean_cycle_rank_ic": 0.5211494957706462,
+      "median_cycle_rank_ic": 0.5541795665634675,
+      "positive_cycle_fraction": 1.0,
+      "block5_bootstrap_95pct_ci": [
+        0.465994857678396,
+        0.5767718942903276
+      ],
+      "first_half_mean_ic": 0.5609133725260439,
+      "second_half_mean_ic": 0.48275678717922765,
+      "cycles": 57
+    },
+    "atr14": {
+      "mean_cycle_rank_ic": 0.6998241963167824,
+      "median_cycle_rank_ic": 0.7132352941176472,
+      "positive_cycle_fraction": 1.0,
+      "block5_bootstrap_95pct_ci": [
+        0.6486525413214961,
+        0.7496993659799183
+      ],
+      "first_half_mean_ic": 0.7400282601078708,
+      "second_half_mean_ic": 0.6610064795529725,
+      "cycles": 57
+    },
+    "forecast_excess_after_price_controls": {
+      "mean_cycle_rank_ic": 0.06557815837594232,
+      "median_cycle_rank_ic": 0.06165413533834586,
+      "positive_cycle_fraction": 0.5789473684210527,
+      "block5_bootstrap_95pct_ci": [
+        -0.01033818207528897,
+        0.14346682228250995
+      ],
+      "first_half_mean_ic": 0.03715075743215947,
+      "second_half_mean_ic": 0.09302530411476712,
+      "cycles": 57
+    }
+  },
+  "limitations": [
+    "Kronos inputs include completed intraday bars through each news-decision time; 15m data is used at 09:45 and 30m at the afternoon cycle.",
+    "Returns run from the decision-bar close to the close five sessions later, with simple SPY subtraction (beta=1).",
+    "Within a date, subtracting the same SPY return from every ticker cannot change rank IC. Interpret rank metrics as stock-return ranking; market adjustment matters for absolute forecasts and thresholds.",
+    "The 23-name watchlist, overlapping outcomes and candidate-only news cycles limit inference; no thresholds were optimized.",
+    "Forecast paths and prices are vendor bars, not executable fills or quoted spreads."
+  ]
+}

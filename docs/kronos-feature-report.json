@@ -1,0 +1,329 @@
+{
+  "status": "EXPLORATORY",
+  "purpose": "Daily Kronos features forecast from prior close; not the intraday news-time setup.",
+  "settings": {
+    "L40_T1": {
+      "samples": 1281,
+      "dates": 61,
+      "invalid_forecasts": 0,
+      "metrics": {
+        "forecast_excess": {
+          "mean_daily_rank_ic": 0.09103773427645978,
+          "median_daily_rank_ic": 0.08300395256916997,
+          "positive_date_fraction": 0.6721311475409836,
+          "block5_bootstrap_95pct_ci": [
+            0.0029897751967746826,
+            0.17854455331874078
+          ],
+          "first_half_mean_ic": 0.139572421715375,
+          "second_half_mean_ic": 0.044068681916219245,
+          "dates": 61
+        },
+        "reversal20": {
+          "mean_daily_rank_ic": 0.1310092340673647,
+          "median_daily_rank_ic": 0.12487100103199174,
+          "positive_date_fraction": 0.639344262295082,
+          "block5_bootstrap_95pct_ci": [
+            0.05174206786562498,
+            0.2113338058523105
+          ],
+          "first_half_mean_ic": 0.1506391152258698,
+          "second_half_mean_ic": 0.11201257488171455,
+          "dates": 61
+        },
+        "momentum12_1": {
+          "mean_daily_rank_ic": -0.03079901319079199,
+          "median_daily_rank_ic": -0.0025974025974025974,
+          "positive_date_fraction": 0.47540983606557374,
+          "block5_bootstrap_95pct_ci": [
+            -0.20125527590506717,
+            0.14178087477356083
+          ],
+          "first_half_mean_ic": -0.14068668532526388,
+          "second_half_mean_ic": 0.07554389532643889,
+          "dates": 61
+        },
+        "below_ma400": {
+          "mean_daily_rank_ic": 0.048350161578339115,
+          "median_daily_rank_ic": 0.07171089779785433,
+          "positive_date_fraction": 0.5245901639344263,
+          "block5_bootstrap_95pct_ci": [
+            -0.12361824214180624,
+            0.21740358846325109
+          ],
+          "first_half_mean_ic": 0.12966399083036584,
+          "second_half_mean_ic": -0.030340640923622177,
+          "dates": 61
+        },
+        "forecast_dispersion": {
+          "mean_daily_rank_ic": 0.6510752016398915,
+          "median_daily_rank_ic": 0.6770186335403727,
+          "positive_date_fraction": 1.0,
+          "block5_bootstrap_95pct_ci": [
+            0.5842715424419656,
+            0.7108778363473603
+          ],
+          "first_half_mean_ic": 0.7122642895310819,
+          "second_half_mean_ic": 0.5918599552935785,
+          "dates": 61
+        },
+        "atr14": {
+          "mean_daily_rank_ic": 0.7534085689714164,
+          "median_daily_rank_ic": 0.7753246753246753,
+          "positive_date_fraction": 1.0,
+          "block5_bootstrap_95pct_ci": [
+            0.7096891009163472,
+            0.7949459513656396
+          ],
+          "first_half_mean_ic": 0.7765331768932522,
+          "second_half_mean_ic": 0.7310299161438333,
+          "dates": 61
+        }
+      }
+    },
+    "L90_T0.6": {
+      "samples": 1281,
+      "dates": 61,
+      "invalid_forecasts": 0,
+      "metrics": {
+        "forecast_excess": {
+          "mean_daily_rank_ic": -0.0465659882685319,
+          "median_daily_rank_ic": -0.01818181818181818,
+          "positive_date_fraction": 0.45901639344262296,
+          "block5_bootstrap_95pct_ci": [
+            -0.15508964307621098,
+            0.06297503791457486
+          ],
+          "first_half_mean_ic": -0.12162371168563121,
+          "second_half_mean_ic": 0.02607051826414481,
+          "dates": 61
+        },
+        "reversal20": {
+          "mean_daily_rank_ic": 0.1310092340673647,
+          "median_daily_rank_ic": 0.12487100103199174,
+          "positive_date_fraction": 0.639344262295082,
+          "block5_bootstrap_95pct_ci": [
+            0.05174206786562498,
+            0.2113338058523105
+          ],
+          "first_half_mean_ic": 0.1506391152258698,
+          "second_half_mean_ic": 0.11201257488171455,
+          "dates": 61
+        },
+        "momentum12_1": {
+          "mean_daily_rank_ic": -0.03079901319079199,
+          "median_daily_rank_ic": -0.0025974025974025974,
+          "positive_date_fraction": 0.47540983606557374,
+          "block5_bootstrap_95pct_ci": [
+            -0.20125527590506717,
+            0.14178087477356083
+          ],
+          "first_half_mean_ic": -0.14068668532526388,
+          "second_half_mean_ic": 0.07554389532643889,
+          "dates": 61
+        },
+        "below_ma400": {
+          "mean_daily_rank_ic": 0.048350161578339115,
+          "median_daily_rank_ic": 0.07171089779785433,
+          "positive_date_fraction": 0.5245901639344263,
+          "block5_bootstrap_95pct_ci": [
+            -0.12361824214180624,
+            0.21740358846325109
+          ],
+          "first_half_mean_ic": 0.12966399083036584,
+          "second_half_mean_ic": -0.030340640923622177,
+          "dates": 61
+        },
+        "forecast_dispersion": {
+          "mean_daily_rank_ic": 0.5217702532523273,
+          "median_daily_rank_ic": 0.5194805194805194,
+          "positive_date_fraction": 1.0,
+          "block5_bootstrap_95pct_ci": [
+            0.46853547643927723,
+            0.5770079174948054
+          ],
+          "first_half_mean_ic": 0.5619329294716292,
+          "second_half_mean_ic": 0.482903147233648,
+          "dates": 61
+        },
+        "atr14": {
+          "mean_daily_rank_ic": 0.7534085689714164,
+          "median_daily_rank_ic": 0.7753246753246753,
+          "positive_date_fraction": 1.0,
+          "block5_bootstrap_95pct_ci": [
+            0.7096891009163472,
+            0.7949459513656396
+          ],
+          "first_half_mean_ic": 0.7765331768932522,
+          "second_half_mean_ic": 0.7310299161438333,
+          "dates": 61
+        }
+      }
+    },
+    "L90_T1": {
+      "samples": 1281,
+      "dates": 61,
+      "invalid_forecasts": 0,
+      "metrics": {
+        "forecast_excess": {
+          "mean_daily_rank_ic": 0.014753461193089675,
+          "median_daily_rank_ic": -0.006015037593984962,
+          "positive_date_fraction": 0.47540983606557374,
+          "block5_bootstrap_95pct_ci": [
+            -0.0848696539885892,
+            0.11795858299053576
+          ],
+          "first_half_mean_ic": -0.03790561325424702,
+          "second_half_mean_ic": 0.06571385581954452,
+          "dates": 61
+        },
+        "reversal20": {
+          "mean_daily_rank_ic": 0.1310092340673647,
+          "median_daily_rank_ic": 0.12487100103199174,
+          "positive_date_fraction": 0.639344262295082,
+          "block5_bootstrap_95pct_ci": [
+            0.05174206786562498,
+            0.2113338058523105
+          ],
+          "first_half_mean_ic": 0.1506391152258698,
+          "second_half_mean_ic": 0.11201257488171455,
+          "dates": 61
+        },
+        "momentum12_1": {
+          "mean_daily_rank_ic": -0.03079901319079199,
+          "median_daily_rank_ic": -0.0025974025974025974,
+          "positive_date_fraction": 0.47540983606557374,
+          "block5_bootstrap_95pct_ci": [
+            -0.20125527590506717,
+            0.14178087477356083
+          ],
+          "first_half_mean_ic": -0.14068668532526388,
+          "second_half_mean_ic": 0.07554389532643889,
+          "dates": 61
+        },
+        "below_ma400": {
+          "mean_daily_rank_ic": 0.048350161578339115,
+          "median_daily_rank_ic": 0.07171089779785433,
+          "positive_date_fraction": 0.5245901639344263,
+          "block5_bootstrap_95pct_ci": [
+            -0.12361824214180624,
+            0.21740358846325109
+          ],
+          "first_half_mean_ic": 0.12966399083036584,
+          "second_half_mean_ic": -0.030340640923622177,
+          "dates": 61
+        },
+        "forecast_dispersion": {
+          "mean_daily_rank_ic": 0.5984729476849414,
+          "median_daily_rank_ic": 0.6185770750988142,
+          "positive_date_fraction": 1.0,
+          "block5_bootstrap_95pct_ci": [
+            0.5487501576321034,
+            0.6496850352475463
+          ],
+          "first_half_mean_ic": 0.6338175371389801,
+          "second_half_mean_ic": 0.5642685062778072,
+          "dates": 61
+        },
+        "atr14": {
+          "mean_daily_rank_ic": 0.7534085689714164,
+          "median_daily_rank_ic": 0.7753246753246753,
+          "positive_date_fraction": 1.0,
+          "block5_bootstrap_95pct_ci": [
+            0.7096891009163472,
+            0.7949459513656396
+          ],
+          "first_half_mean_ic": 0.7765331768932522,
+          "second_half_mean_ic": 0.7310299161438333,
+          "dates": 61
+        }
+      }
+    },
+    "L400_T1": {
+      "samples": 1271,
+      "dates": 61,
+      "invalid_forecasts": 10,
+      "metrics": {
+        "forecast_excess": {
+          "mean_daily_rank_ic": 0.027948400966855455,
+          "median_daily_rank_ic": 0.07532467532467534,
+          "positive_date_fraction": 0.5409836065573771,
+          "block5_bootstrap_95pct_ci": [
+            -0.1482934915654442,
+            0.19707219608370452
+          ],
+          "first_half_mean_ic": 0.09849841025100144,
+          "second_half_mean_ic": -0.040325801566189076,
+          "dates": 61
+        },
+        "reversal20": {
+          "mean_daily_rank_ic": 0.13618690260704608,
+          "median_daily_rank_ic": 0.12487100103199174,
+          "positive_date_fraction": 0.639344262295082,
+          "block5_bootstrap_95pct_ci": [
+            0.056176994615571074,
+            0.21765580960837036
+          ],
+          "first_half_mean_ic": 0.1557364930578014,
+          "second_half_mean_ic": 0.1172679441063151,
+          "dates": 61
+        },
+        "momentum12_1": {
+          "mean_daily_rank_ic": -0.029549006491935068,
+          "median_daily_rank_ic": -0.0025974025974025974,
+          "positive_date_fraction": 0.47540983606557374,
+          "block5_bootstrap_95pct_ci": [
+            -0.2000140592050371,
+            0.1433889484135861
+          ],
+          "first_half_mean_ic": -0.1380854193143869,
+          "second_half_mean_ic": 0.07548623172334086,
+          "dates": 61
+        },
+        "below_ma400": {
+          "mean_daily_rank_ic": 0.04827630411364071,
+          "median_daily_rank_ic": 0.07171089779785433,
+          "positive_date_fraction": 0.5245901639344263,
+          "block5_bootstrap_95pct_ci": [
+            -0.1243543879814951,
+            0.21820898966488425
+          ],
+          "first_half_mean_ic": 0.12683126672761885,
+          "second_half_mean_ic": -0.02774462744827357,
+          "dates": 61
+        },
+        "forecast_dispersion": {
+          "mean_daily_rank_ic": 0.39455576471910336,
+          "median_daily_rank_ic": 0.4311688311688312,
+          "positive_date_fraction": 0.9016393442622951,
+          "block5_bootstrap_95pct_ci": [
+            0.30125883188757907,
+            0.4751354173684944
+          ],
+          "first_half_mean_ic": 0.2900469728145055,
+          "second_half_mean_ic": 0.49569330527193994,
+          "dates": 61
+        },
+        "atr14": {
+          "mean_daily_rank_ic": 0.753708938550576,
+          "median_daily_rank_ic": 0.7844155844155845,
+          "positive_date_fraction": 1.0,
+          "block5_bootstrap_95pct_ci": [
+            0.7105270125422375,
+            0.7950014599089917
+          ],
+          "first_half_mean_ic": 0.7751240215939368,
+          "second_half_mean_ic": 0.7329846646376461,
+          "dates": 61
+        }
+      }
+    }
+  },
+  "limitations": [
+    "Forecasts use daily bars through the prior session, omitting the current news-day price reaction.",
+    "Within a date, subtracting the same SPY return from every ticker cannot change rank IC. Interpret rank metrics as stock-return ranking; market adjustment matters for absolute forecasts and thresholds.",
+    "Date-level rank ICs use a 23-name proxy watchlist and overlapping 5-session outcomes.",
+    "Temperature/lookback settings were informed by a preceding 12-date sweep; this comparison is not a pristine holdout.",
+    "No portfolio thresholds were tuned and no live or paper trading was performed."
+  ]
+}

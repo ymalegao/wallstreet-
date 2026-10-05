@@ -54,7 +54,9 @@ ITEMS_8K = {
 
 def make_client(user_agent: str) -> RateLimitedClient:
     # SEC fair-access policy: <= 10 requests/second with a descriptive User-Agent.
-    return RateLimitedClient(headers={"User-Agent": user_agent}, max_per_sec=8.0)
+    if "@" not in user_agent or len(user_agent.split()) < 2:
+        raise ValueError("SEC_USER_AGENT must identify the application and a monitored contact email")
+    return RateLimitedClient(headers={"User-Agent": user_agent}, max_per_sec=2.0, budget="sec")
 
 
 def ticker_to_cik(client: RateLimitedClient) -> dict[str, int]:

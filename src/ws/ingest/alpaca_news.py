@@ -49,12 +49,16 @@ def iter_raw(
     }
     if symbols:
         params["symbols"] = ",".join(symbols)
+    seen_tokens: set[str] = set()
     while True:
         page = client.get_json(NEWS_PATH, params)
         yield from page.get("news", [])
         token = page.get("next_page_token")
         if not token:
             return
+        if token in seen_tokens:
+            raise RuntimeError("Alpaca news repeated a pagination token")
+        seen_tokens.add(token)
         params["page_token"] = token
 
 
@@ -62,13 +66,14 @@ def normalize(raw: dict[str, Any], *, observed_at: datetime | None = None) -> Ev
     """Normalize one raw article.
 
     ``observed_at`` is set only for live-stream items: our receipt time becomes ``first_seen_ts``.
-    For backfill, ``first_seen_ts`` is the vendor's ``created_at`` (``ts_origin=vendor``).
+    For backfill, current text is available no earlier than the latest vendor revision.
+    This is conservative; it does not reconstruct the original article version.
     """
     published = parse_rfc3339(raw["created_at"])
     updated = parse_rfc3339(raw["updated_at"]) if raw.get("updated_at") else None
     # Live: the earliest moment *we* could act is our receipt time. Backfill: vendor publish time;
     # the backtest adds the latency measured live (probe report) on top via next_decision_cycle().
-    first_seen = observed_at if observed_at else published
+    first_seen = observed_at if observed_at else max(published, updated or published)
     summary = html_to_text(raw.get("summary"))
     content = html_to_text(raw.get("content"))
     return Event(

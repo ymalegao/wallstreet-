@@ -9,6 +9,7 @@ COPY src ./src
 COPY scripts ./scripts
 COPY configs ./configs
 RUN uv sync --frozen --no-dev
+RUN mkdir -p /app/docs
 ENV WS_DATA_DIR=/data
 VOLUME /data
 ENTRYPOINT ["uv", "run", "--no-sync", "python"]

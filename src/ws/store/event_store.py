@@ -18,6 +18,7 @@ import duckdb
 import polars as pl
 
 from ws.schema import Bar, Event
+from ws.store.atomic import atomic_path, file_lock
 
 EVENT_SCHEMA: dict[str, pl.DataType] = {
     "event_id": pl.String(),
@@ -64,6 +65,11 @@ class EventStore:
 
     def write(self, events: Iterable[Event]) -> int:
         """Persist events not seen before. Returns the number of new rows written."""
+        with file_lock(self.dir / ".writer.lock"):
+            self._ids = None  # refresh under the shared writer lock
+            return self._write_locked(events)
+
+    def _write_locked(self, events: Iterable[Event]) -> int:
         known = self._known_ids()
         fresh: dict[str, Event] = {}
         for e in events:
@@ -75,7 +81,8 @@ class EventStore:
         for (source, month), part in df.group_by(["source", "month"]):
             d = self.dir / f"source={source}" / f"month={month}"
             d.mkdir(parents=True, exist_ok=True)
-            part.drop("month").write_parquet(d / f"part-{uuid.uuid4().hex}.parquet")
+            with atomic_path(d / f"part-{uuid.uuid4().hex}.parquet") as tmp:
+                part.drop("month").write_parquet(tmp)
         known.update(fresh)
         return len(fresh)
 
@@ -95,18 +102,28 @@ class BarStore:
         self.dir = root / "bars" / timeframe
 
     def write(self, bars: Iterable[Bar]) -> int:
+        with file_lock(self.dir / ".writer.lock"):
+            return self._write_locked(bars)
+
+    def _write_locked(self, bars: Iterable[Bar]) -> int:
         df = pl.DataFrame([b.model_dump() for b in bars])
         if df.is_empty():
             return 0
         n = 0
         for (symbol,), part in df.group_by(["symbol"]):
+            if "/" in symbol or "\\" in symbol or symbol in {".", ".."}:
+                raise ValueError("Unsafe symbol for bar storage")
             path = self.dir / f"{symbol}.parquet"
+            previous = 0
             if path.exists():
-                part = pl.concat([pl.read_parquet(path), part], how="diagonal_relaxed")
+                old = pl.read_parquet(path)
+                previous = old.height
+                part = pl.concat([old, part], how="diagonal_relaxed")
             part = part.unique(subset=["symbol", "ts"], keep="first").sort("ts")
             self.dir.mkdir(parents=True, exist_ok=True)
-            part.write_parquet(path)
-            n += part.height
+            with atomic_path(path) as tmp:
+                part.write_parquet(tmp)
+            n += part.height - previous
         return n
 
     def read(self, symbols: list[str] | None = None) -> pl.DataFrame:

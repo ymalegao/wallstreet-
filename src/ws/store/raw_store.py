@@ -9,6 +9,7 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
+from ws.store.atomic import atomic_path
 from ws.timeutil import utcnow
 
 
@@ -24,7 +25,7 @@ class RawStore:
         d = self.root / source / now.strftime("%Y-%m-%d")
         d.mkdir(parents=True, exist_ok=True)
         path = d / f"{now.strftime('%H%M%S')}-{uuid.uuid4().hex[:8]}.jsonl.gz"
-        with gzip.open(path, "wt", encoding="utf-8") as f:
+        with atomic_path(path) as tmp, gzip.open(tmp, "wt", encoding="utf-8") as f:
             for r in records:
                 f.write(json.dumps({"fetched_at": now.isoformat(), "payload": r}) + "\n")
         return path

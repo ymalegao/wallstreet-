@@ -27,8 +27,8 @@ def load_settings() -> Settings:
     load_dotenv()
     return Settings(
         data_dir=Path(os.environ.get("WS_DATA_DIR", "data")),
-        alpaca_key=os.environ.get("ALPACA_API_KEY"),
-        alpaca_secret=os.environ.get("ALPACA_SECRET_KEY"),
-        finnhub_key=os.environ.get("FINNHUB_API_KEY"),
+        alpaca_key=os.environ.get("ALPACA_API_KEY") or os.environ.get("ALPACA_KEY"),
+        alpaca_secret=os.environ.get("ALPACA_SECRET_KEY") or os.environ.get("ALPACA_SECRET"),
+        finnhub_key=os.environ.get("FINNHUB_API_KEY") or os.environ.get("FINN_HUB_API"),
         sec_user_agent=os.environ.get("SEC_USER_AGENT"),
     )

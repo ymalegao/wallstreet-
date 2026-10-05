@@ -24,11 +24,12 @@ ALPACA_DOC_SHAPE = {
 }
 
 
-def test_alpaca_backfill_uses_vendor_time():
+def test_alpaca_backfill_delays_revised_text_until_revision_time():
     e = alpaca_news.normalize(ALPACA_DOC_SHAPE)
     assert e.event_id == "alpaca_news:24843171"
     assert e.ts_origin is TsOrigin.VENDOR
-    assert e.first_seen_ts == datetime(2022, 1, 27, 21, 31, 23, tzinfo=UTC)
+    assert e.first_seen_ts == datetime(2022, 1, 27, 21, 45, tzinfo=UTC)
+    assert e.published_ts == datetime(2022, 1, 27, 21, 31, 23, tzinfo=UTC)
     assert e.tickers == ["AAPL"]
     assert e.headline == "Apple Reports Q1 Results"
     assert e.body == "Apple & co reported..."
