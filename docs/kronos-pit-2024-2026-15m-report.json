@@ -1,0 +1,171 @@
+{
+  "status": "EXPLORATORY",
+  "samples": 12094,
+  "invalid_samples": 0,
+  "excluded_insufficient_400_session_history": 331,
+  "excluded_missing_five_session_label": 0,
+  "decision_cycles": 497,
+  "decision_session_range": {
+    "first": "2024-07-08",
+    "last": "2026-06-30"
+  },
+  "bootstrap_block_cycles": 5,
+  "by_interval": {
+    "15": 12094,
+    "30": 0
+  },
+  "metrics": {
+    "forecast_return": {
+      "mean_cycle_rank_ic": 0.0010311550054354721,
+      "median_cycle_rank_ic": -0.010434782608695651,
+      "positive_cycle_fraction": 0.48490945674044267,
+      "block5_bootstrap_95pct_ci": [
+        -0.03413725649732998,
+        0.035415195184484854
+      ],
+      "first_half_mean_ic": 0.006750323659510195,
+      "second_half_mean_ic": -0.004665045099827705,
+      "cycles": 497
+    },
+    "reversal20": {
+      "mean_cycle_rank_ic": 0.006483895773546728,
+      "median_cycle_rank_ic": -0.0007692307692307692,
+      "positive_cycle_fraction": 0.49899396378269617,
+      "block5_bootstrap_95pct_ci": [
+        -0.03770924574506938,
+        0.05087308894412385
+      ],
+      "first_half_mean_ic": 0.029826977020174783,
+      "second_half_mean_ic": -0.01676543815883784,
+      "cycles": 497
+    },
+    "momentum12_1": {
+      "mean_cycle_rank_ic": 0.04982061416844025,
+      "median_cycle_rank_ic": 0.09486166007905138,
+      "positive_cycle_fraction": 0.5653923541247485,
+      "block5_bootstrap_95pct_ci": [
+        -0.004817311592265664,
+        0.1011816259368311
+      ],
+      "first_half_mean_ic": 0.03630556154925019,
+      "second_half_mean_ic": 0.06328138946787454,
+      "cycles": 497
+    },
+    "below_ma400": {
+      "mean_cycle_rank_ic": -0.029264764629124702,
+      "median_cycle_rank_ic": -0.06,
+      "positive_cycle_fraction": 0.43661971830985913,
+      "block5_bootstrap_95pct_ci": [
+        -0.07733846144669784,
+        0.022304429801674155
+      ],
+      "first_half_mean_ic": 0.0049339195166684625,
+      "second_half_mean_ic": -0.06332610466188256,
+      "cycles": 497
+    },
+    "current_day_return": {
+      "mean_cycle_rank_ic": 0.01403027978604464,
+      "median_cycle_rank_ic": 0.03913043478260869,
+      "positive_cycle_fraction": 0.5472837022132797,
+      "block5_bootstrap_95pct_ci": [
+        -0.009438398583389943,
+        0.03744520072950137
+      ],
+      "first_half_mean_ic": 0.0080863365881157,
+      "second_half_mean_ic": 0.019950351726150575,
+      "cycles": 497
+    },
+    "open_gap": {
+      "mean_cycle_rank_ic": -0.007962933555793972,
+      "median_cycle_rank_ic": 0.002307692307692308,
+      "positive_cycle_fraction": 0.5030181086519114,
+      "block5_bootstrap_95pct_ci": [
+        -0.03319828658456725,
+        0.017980440374234793
+      ],
+      "first_half_mean_ic": -0.018365299933455072,
+      "second_half_mean_ic": 0.0023976562500692957,
+      "cycles": 497
+    },
+    "intraday_return_to_cycle": {
+      "mean_cycle_rank_ic": 0.025806876356368177,
+      "median_cycle_rank_ic": 0.033846153846153845,
+      "positive_cycle_fraction": 0.5653923541247485,
+      "block5_bootstrap_95pct_ci": [
+        0.0023508181317166634,
+        0.0494793181478749
+      ],
+      "first_half_mean_ic": 0.038939649416725335,
+      "second_half_mean_ic": 0.012726845356494383,
+      "cycles": 497
+    },
+    "forecast_dispersion": {
+      "mean_cycle_rank_ic": 0.5189580229935404,
+      "median_cycle_rank_ic": 0.5426086956521738,
+      "positive_cycle_fraction": 0.9979879275653923,
+      "block5_bootstrap_95pct_ci": [
+        0.495494227756322,
+        0.5418990484408427
+      ],
+      "first_half_mean_ic": 0.5549645323120077,
+      "second_half_mean_ic": 0.4830961181301674,
+      "cycles": 497
+    },
+    "atr14": {
+      "mean_cycle_rank_ic": 0.7029261308195783,
+      "median_cycle_rank_ic": 0.7330434782608695,
+      "positive_cycle_fraction": 1.0,
+      "block5_bootstrap_95pct_ci": [
+        0.6814515733806915,
+        0.7232390307182102
+      ],
+      "first_half_mean_ic": 0.7245027780774624,
+      "second_half_mean_ic": 0.6814361367635332,
+      "cycles": 497
+    },
+    "forecast_excess": {
+      "mean_cycle_rank_ic": 0.0010311550054354721,
+      "median_cycle_rank_ic": -0.010434782608695651,
+      "positive_cycle_fraction": 0.48490945674044267,
+      "block5_bootstrap_95pct_ci": [
+        -0.03413725649732998,
+        0.035415195184484854
+      ],
+      "first_half_mean_ic": 0.006750323659510195,
+      "second_half_mean_ic": -0.004665045099827705,
+      "cycles": 497
+    },
+    "forecast_excess_after_price_controls": {
+      "mean_cycle_rank_ic": -0.004300849181437053,
+      "median_cycle_rank_ic": -0.014782608695652172,
+      "positive_cycle_fraction": 0.4869215291750503,
+      "block5_bootstrap_95pct_ci": [
+        -0.03506876665893811,
+        0.026500804308979442
+      ],
+      "first_half_mean_ic": -0.02301933865573416,
+      "second_half_mean_ic": 0.014342465636336777,
+      "cycles": 497
+    }
+  },
+  "absolute_market_adjusted_forecasts": {
+    "samples": 12094,
+    "mean_forecast_excess": -0.002640677042662356,
+    "mean_realized_excess": 0.002039688700133365,
+    "mean_absolute_error": 0.05434261805264261,
+    "zero_forecast_baseline_mae": 0.04798713141889861,
+    "mae_skill_vs_zero_baseline": -0.13244147849273258,
+    "directional_accuracy": 0.5033901107987432
+  },
+  "spy_rank_invariance": {
+    "cycles_compared": 497,
+    "max_abs_raw_vs_spy_relative_rank_ic_difference": 0.0
+  },
+  "limitations": [
+    "Kronos inputs include completed intraday bars through each decision time; no news or JEV features are used. 15m data is used at 09:45 ET and 30m data at 15:30 ET.",
+    "Both raw and SPY-relative stock returns are reported. Subtracting one common SPY value per date cannot change cross-sectional rank IC, though paired SPY forecasts are retained for absolute market-relative thresholds and future portfolio decisions.",
+    "The point-in-time candidate universe uses a current asset snapshot, so it has survivorship bias and is not a complete historical listing universe. Outcomes overlap; no thresholds were optimized. Rows with fewer than 400 prior daily sessions are omitted to keep the 400-session moving-average control comparable.",
+    "Alpaca all-adjusted bars are used for model inputs and labels, so outcomes are adjusted returns rather than raw spot-price returns or executable fills. They cannot stand in for historical option-contract pricing.",
+    "Forecast paths and prices are vendor bars, not executable fills or quoted spreads."
+  ]
+}

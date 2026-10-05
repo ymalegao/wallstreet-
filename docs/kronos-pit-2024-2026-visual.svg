@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="560" viewBox="0 0 1080 560">
+<rect width="100%" height="100%" fill="white"/>
+<text x="540.0" y="36.0" font-size="22" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">Kronos across the July 2024–June 2026 PIT sample</text>
+<text x="540.0" y="62.0" font-size="13" text-anchor="middle" fill="#555" font-family="Arial, sans-serif">Mean per-cycle rank IC for five-session returns; error bars are 5-session block-bootstrap 95% intervals</text>
+<line x1="105.0" y1="420.0" x2="1010.0" y2="420.0" stroke="#e5e5e5" stroke-width="1" />
+<text x="95.0" y="424.0" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">-0.08</text>
+<line x1="105.0" y1="380.6" x2="1010.0" y2="380.6" stroke="#e5e5e5" stroke-width="1" />
+<text x="95.0" y="384.6" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">-0.06</text>
+<line x1="105.0" y1="341.2" x2="1010.0" y2="341.2" stroke="#e5e5e5" stroke-width="1" />
+<text x="95.0" y="345.2" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">-0.04</text>
+<line x1="105.0" y1="301.9" x2="1010.0" y2="301.9" stroke="#e5e5e5" stroke-width="1" />
+<text x="95.0" y="305.9" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">-0.02</text>
+<line x1="105.0" y1="262.5" x2="1010.0" y2="262.5" stroke="#e5e5e5" stroke-width="1" />
+<text x="95.0" y="266.5" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">+0.00</text>
+<line x1="105.0" y1="223.1" x2="1010.0" y2="223.1" stroke="#e5e5e5" stroke-width="1" />
+<text x="95.0" y="227.1" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">+0.02</text>
+<line x1="105.0" y1="183.8" x2="1010.0" y2="183.8" stroke="#e5e5e5" stroke-width="1" />
+<text x="95.0" y="187.8" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">+0.04</text>
+<line x1="105.0" y1="144.4" x2="1010.0" y2="144.4" stroke="#e5e5e5" stroke-width="1" />
+<text x="95.0" y="148.4" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">+0.06</text>
+<line x1="105.0" y1="105.0" x2="1010.0" y2="105.0" stroke="#e5e5e5" stroke-width="1" />
+<text x="95.0" y="109.0" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">+0.08</text>
+<line x1="105.0" y1="262.5" x2="1010.0" y2="262.5" stroke="#555" stroke-width="1.5" />
+<text x="331.2" y="452.0" font-size="14" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">Morning / 15m</text>
+<text x="331.2" y="471.0" font-size="11" text-anchor="middle" fill="#555" font-family="Arial, sans-serif">n=12,094; 497 cycles</text>
+<rect x="153.4" y="260.5" width="54" height="2.0" fill="#247ba0" opacity="0.86"/>
+<line x1="180.4" y1="329.7" x2="180.4" y2="192.8" stroke="#222" stroke-width="1.5" />
+<line x1="173.4" y1="329.7" x2="187.4" y2="329.7" stroke="#222" stroke-width="1.5" />
+<line x1="173.4" y1="192.8" x2="187.4" y2="192.8" stroke="#222" stroke-width="1.5" />
+<text x="180.4" y="252.5" font-size="11" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">+0.001</text>
+<rect x="304.2" y="249.7" width="54" height="12.8" fill="#f18f01" opacity="0.86"/>
+<line x1="331.2" y1="336.7" x2="331.2" y2="162.3" stroke="#222" stroke-width="1.5" />
+<line x1="324.2" y1="336.7" x2="338.2" y2="336.7" stroke="#222" stroke-width="1.5" />
+<line x1="324.2" y1="162.3" x2="338.2" y2="162.3" stroke="#222" stroke-width="1.5" />
+<text x="331.2" y="241.7" font-size="11" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">+0.006</text>
+<rect x="455.1" y="262.5" width="54" height="8.5" fill="#8e5ea2" opacity="0.86"/>
+<line x1="482.1" y1="331.5" x2="482.1" y2="210.3" stroke="#222" stroke-width="1.5" />
+<line x1="475.1" y1="331.5" x2="489.1" y2="331.5" stroke="#222" stroke-width="1.5" />
+<line x1="475.1" y1="210.3" x2="489.1" y2="210.3" stroke="#222" stroke-width="1.5" />
+<text x="482.1" y="289.0" font-size="11" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">-0.004</text>
+<text x="783.8" y="452.0" font-size="14" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">Afternoon / 30m</text>
+<text x="783.8" y="471.0" font-size="11" text-anchor="middle" fill="#555" font-family="Arial, sans-serif">n=12,019; 494 cycles</text>
+<rect x="605.9" y="262.5" width="54" height="39.6" fill="#247ba0" opacity="0.86"/>
+<line x1="632.9" y1="370.3" x2="632.9" y2="232.6" stroke="#222" stroke-width="1.5" />
+<line x1="625.9" y1="370.3" x2="639.9" y2="370.3" stroke="#222" stroke-width="1.5" />
+<line x1="625.9" y1="232.6" x2="639.9" y2="232.6" stroke="#222" stroke-width="1.5" />
+<text x="632.9" y="320.1" font-size="11" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">-0.020</text>
+<rect x="756.8" y="262.5" width="54" height="1.3" fill="#f18f01" opacity="0.86"/>
+<line x1="783.8" y1="353.8" x2="783.8" y2="171.3" stroke="#222" stroke-width="1.5" />
+<line x1="776.8" y1="353.8" x2="790.8" y2="353.8" stroke="#222" stroke-width="1.5" />
+<line x1="776.8" y1="171.3" x2="790.8" y2="171.3" stroke="#222" stroke-width="1.5" />
+<text x="783.8" y="281.8" font-size="11" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">-0.001</text>
+<rect x="907.6" y="262.5" width="54" height="7.9" fill="#8e5ea2" opacity="0.86"/>
+<line x1="934.6" y1="329.9" x2="934.6" y2="207.8" stroke="#222" stroke-width="1.5" />
+<line x1="927.6" y1="329.9" x2="941.6" y2="329.9" stroke="#222" stroke-width="1.5" />
+<line x1="927.6" y1="207.8" x2="941.6" y2="207.8" stroke="#222" stroke-width="1.5" />
+<text x="934.6" y="288.4" font-size="11" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">-0.004</text>
+<rect x="155" y="492" width="16" height="12" fill="#247ba0"/>
+<text x="178.0" y="503.0" font-size="12" text-anchor="start" fill="#222" font-family="Arial, sans-serif">Kronos, SPY-relative</text>
+<rect x="440" y="492" width="16" height="12" fill="#f18f01"/>
+<text x="463.0" y="503.0" font-size="12" text-anchor="start" fill="#222" font-family="Arial, sans-serif">20-day reversal</text>
+<rect x="725" y="492" width="16" height="12" fill="#8e5ea2"/>
+<text x="748.0" y="503.0" font-size="12" text-anchor="start" fill="#222" font-family="Arial, sans-serif">Kronos after controls</text>
+<text x="540.0" y="535.0" font-size="12" text-anchor="middle" fill="#555" font-family="Arial, sans-serif">Exploratory feature test, not a portfolio backtest; current asset snapshot leaves survivorship bias.</text>
+</svg>

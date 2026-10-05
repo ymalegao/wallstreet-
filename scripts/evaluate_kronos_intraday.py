@@ -268,8 +268,8 @@ def main() -> None:
     }
 
     limitations = [
-        "Kronos inputs include completed intraday bars through each news-decision time; "
-        "15m data is used at 09:45 and 30m at the afternoon cycle.",
+        "Kronos inputs include completed intraday bars through each decision time; no news or JEV "
+        "features are used. 15m data is used at 09:45 ET and 30m data at 15:30 ET.",
         "Both raw and SPY-relative stock returns are reported. Subtracting one common SPY value "
         "per date cannot change cross-sectional rank IC, though paired SPY forecasts are retained "
         "for absolute market-relative thresholds and future portfolio decisions.",
@@ -304,7 +304,7 @@ def main() -> None:
     }
     atomic_text(a.output, json.dumps(report, indent=2, allow_nan=False) + "\n")
     lines = [
-        "# Kronos at the news decision time",
+        "# Kronos at the intraday decision time",
         "",
         "**EXPLORATORY**",
         "",

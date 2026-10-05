@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import json
+import math
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -309,7 +310,23 @@ def kronos_pit_svg(out: Path) -> None:
     ]
     width, height = 1080, 560
     left, right, top, bottom = 105, 1010, 105, 420
-    lo, hi = -0.3, 0.4
+    features = [
+        ("forecast_excess", "Kronos, SPY-relative", "#247ba0"),
+        ("reversal20", "20-day reversal", "#f18f01"),
+        ("forecast_excess_after_price_controls", "Kronos after controls", "#8e5ea2"),
+    ]
+    ci_extents = [
+        abs(float(bound))
+        for _, report in reports
+        for feature, _, _ in features
+        for bound in report["metrics"][feature]["block5_bootstrap_95pct_ci"]
+        if bound is not None
+    ]
+    max_ci = max(ci_extents, default=0.08)
+    tick_step = 0.02 if max_ci <= 0.1 else 0.05 if max_ci <= 0.3 else 0.1
+    limit = round(math.ceil((max_ci + tick_step * 1.25) / tick_step) * tick_step, 6)
+    lo, hi = -limit, limit
+    tick_format = ".2f" if tick_step < 0.1 else ".1f"
 
     def ymap(v: float) -> float:
         return bottom - (v - lo) / (hi - lo) * (bottom - top)
@@ -327,18 +344,13 @@ def kronos_pit_svg(out: Path) -> None:
             "#555",
         ),
     ]
-    for tick in np_ticks(lo, hi, 0.1):
+    for tick in np_ticks(lo, hi, tick_step):
         y = ymap(tick)
         parts.append(line(left, y, right, y, "#e5e5e5"))
-        parts.append(text(left - 10, y + 4, f"{tick:+.1f}", 11, "end", "#666"))
+        parts.append(text(left - 10, y + 4, format(tick, f"+{tick_format}"), 11, "end", "#666"))
     zero = ymap(0)
     parts.append(line(left, zero, right, zero, "#555", 1.5))
 
-    features = [
-        ("forecast_excess", "Kronos, SPY-relative", "#247ba0"),
-        ("reversal20", "20-day reversal", "#f18f01"),
-        ("forecast_excess_after_price_controls", "Kronos after controls", "#8e5ea2"),
-    ]
     group_width = (right - left) / len(reports)
     slot = group_width / len(features)
     bar_width = 54
