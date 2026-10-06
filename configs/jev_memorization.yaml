@@ -1,0 +1,49 @@
+protocol_version: 1
+model: autotrust/JEV-9B
+revision: b63f651ce8ed64481d3f5e73ecdb05f740042f01
+inference_kind: jev
+period:
+  first_outcome_month: 2023-01
+  last_outcome_month: 2026-09
+  month_ends_required_from: 2022-12
+source:
+  bars: data/bars/1Day_all
+  adjustment: all
+  ticker_pool: data/universe/listed_stock_candidates_2026-10-04.json
+question:
+  template: Over {month}, did the split/dividend-adjusted closing price of ticker
+    {ticker} finish higher or lower than at the end of the preceding month?
+  control_template: Over {month}, did the split/dividend-adjusted closing price of
+    the stock whose identity is withheld finish higher or lower than at the end of
+    the preceding month?
+  answers:
+  - higher
+  - lower
+sampling:
+  seed: 20261005
+  balance_within_each_month: true
+  fixed_complete_history_universe: true
+  maximum_per_class_per_month: 32
+  pair_each_named_question_with_identity_masked_control: true
+chance_baseline: 0.5
+confidence_interval:
+  level: 0.95
+  method: Wilson score interval
+multiple_testing:
+  method: Holm-Bonferroni
+  family: 45 monthly one-sided exact binomial tests of named-question accuracy > 0.5
+cutoff_rule: A month is memory-positive when its Holm-adjusted one-sided exact-binomial
+  p-value is < 0.05. The detected cutoff is the latest memory-positive month. The
+  candidate clean window starts the following month. If no month is memory-positive,
+  or no complete score set exists, cutoff and candidate clean start remain null and
+  the clean window is UNESTABLISHED. A failure to detect above-chance accuracy does
+  not certify that the model has no relevant training overlap.
+results:
+  question_set_sha256: 9911d11ad7ebf91a8dfb626cc84ffac83cadede62eebb85e8d68f13942a04f68
+  named_accuracy: null
+  masked_control_accuracy: null
+  detected_cutoff_month: null
+  candidate_clean_window_start: null
+  clean_window_status: UNESTABLISHED
+  question_count: 1778
+  candidate_ticker_count: 63
