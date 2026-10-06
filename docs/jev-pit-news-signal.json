@@ -1,0 +1,95 @@
+{
+  "status": "EXPLORATORY JEV-only feature test; no Kronos forecasts, gates, or exclusions",
+  "model": "jev-decision",
+  "revision": "b63f651ce8ed64481d3f5e73ecdb05f740042f01",
+  "period": {
+    "start_inclusive": "2024-07-01",
+    "end_exclusive": "2026-07-01"
+  },
+  "universe_source": "data/universe/alpaca_assets_2026-10-04.jsonl",
+  "label_bar_stores": [
+    "15Min"
+  ],
+  "daily_feature_bar_stores": [
+    "1Day_all"
+  ],
+  "universe_sessions": 501,
+  "samples_all_top25_cycles": 25050,
+  "samples_with_complete_5d_prices": 25050,
+  "missing_price_labels": 0,
+  "news_ticker_cycles_scored": 19687,
+  "event_texts_scored": 84219,
+  "news_coverage_fraction_of_top25_cycles": 0.7859081836327345,
+  "input_sha256": "3daf4a1cd1408f0df8d82c3c8113480bcea5ffcdbdbe44caab9c1bc5df62b551",
+  "latency_minutes": 5,
+  "latency_status": "UNVERIFIED source-level assumption; shown for exploratory sensitivity only",
+  "primary_outcome": "five-session stock return less SPY return over the identical interval (beta fixed at 1)",
+  "cross_sectional_metrics": {
+    "jev_signal": {
+      "pooled_spearman_descriptive": -0.005114564951105262,
+      "mean_cycle_rank_ic": -0.0011326789335431838,
+      "median_cycle_rank_ic": 0.00628155417341208,
+      "cycles_with_rank_ic": 1002,
+      "block5_session_95pct_ci": [
+        -0.01842373072142838,
+        0.016287947072527127
+      ],
+      "fraction_positive_cycles": 0.5119760479041916
+    },
+    "reversal_20": {
+      "pooled_spearman_descriptive": 0.00796820965366288,
+      "mean_cycle_rank_ic": -0.0013639610411284454,
+      "median_cycle_rank_ic": -0.002692307692307692,
+      "cycles_with_rank_ic": 1002,
+      "block5_session_95pct_ci": [
+        -0.046225669897662865,
+        0.042986562827522216
+      ],
+      "fraction_positive_cycles": 0.49800399201596807
+    },
+    "momentum_12_1": {
+      "pooled_spearman_descriptive": 0.046502951821715766,
+      "mean_cycle_rank_ic": 0.05229195606961813,
+      "median_cycle_rank_ic": 0.08289297658862876,
+      "cycles_with_rank_ic": 1002,
+      "block5_session_95pct_ci": [
+        -0.0012867830013430091,
+        0.10510894348426891
+      ],
+      "fraction_positive_cycles": 0.5768463073852296
+    }
+  },
+  "fixed_signal_groups": {
+    "negative_signal": {
+      "samples": 5582,
+      "mean_abnormal_return_5": 0.003654691203439653,
+      "median_abnormal_return_5": -0.00020986866673428084,
+      "positive_fraction": 0.49785023289143676
+    },
+    "zero_signal": {
+      "samples": 10329,
+      "mean_abnormal_return_5": 0.002237603949922482,
+      "median_abnormal_return_5": 0.000610616678528908,
+      "positive_fraction": 0.5066318133410785
+    },
+    "positive_signal": {
+      "samples": 9139,
+      "mean_abnormal_return_5": 0.002338249164195969,
+      "median_abnormal_return_5": -0.00013920402344402838,
+      "positive_fraction": 0.49874165663639347
+    },
+    "fixed_entry_rule_signal_ge_1_3": {
+      "samples": 9139,
+      "mean_abnormal_return_5": 0.002338249164195969,
+      "median_abnormal_return_5": -0.00013920402344402838,
+      "positive_fraction": 0.49874165663639347
+    }
+  },
+  "limitations": [
+    "The candidate pool is the earlier current-asset snapshot; delisted-security survivorship bias remains until the revised universe is used.",
+    "Near-duplicate news threshold and historical news latency remain unverified. Revised text is delayed until updated_at.",
+    "Five-session outcomes overlap. Confidence intervals use a five-session block bootstrap; pooled correlations are descriptive only.",
+    "This feature test is not a live execution backtest, and it does not establish an options strategy.",
+    "Supplemental Massive bars use their own adjustment rules and are recorded in the report; adjustment differences around corporate actions may affect mixed-source labels and price features."
+  ]
+}

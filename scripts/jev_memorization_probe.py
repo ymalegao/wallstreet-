@@ -325,14 +325,27 @@ def score(args: argparse.Namespace) -> None:
 
 
 def write_markdown(report: dict[str, Any]) -> None:
+    existing = REPORT_MD_PATH.read_text()
+    protocol, marker, remainder = existing.partition("## Results")
+    if not marker:
+        raise ValueError("Probe document is missing its frozen Results section")
+    _, limits_marker, limits = remainder.partition("## Limits")
+    total_n = sum(row["n_per_condition"] for row in report["monthly_results"])
+    named_accuracy = sum(row["named_correct"] for row in report["monthly_results"]) / total_n
+    masked_accuracy = sum(row["masked_correct"] for row in report["monthly_results"]) / total_n
     lines = [
-        "# JEV-9B memorization probe",
+        protocol.rstrip(),
+        "",
+        "## Results",
         "",
         (
-            f"Revision `{report['revision']}`; {report['question_count']} balanced named questions with matched "
-            "identity-masked controls."
+            f"Revision `{report['revision']}`; {report['question_count']} questions; set SHA-256 "
+            f"`{report['question_set_sha256']}`."
         ),
-        f"Question-set SHA-256: `{report['question_set_sha256']}`.",
+        (
+            f"Pooled named accuracy: **{named_accuracy:.1%}**; identity-masked control: "
+            f"**{masked_accuracy:.1%}**; chance: 50%."
+        ),
         "",
         (
             f"Detected cutoff month: **{report['detected_cutoff_month'] or 'not detected'}**. "
@@ -359,7 +372,9 @@ def write_markdown(report: dict[str, Any]) -> None:
             f"[{low:.3f}, {high:.3f}] | {row['masked_accuracy']:.3f} [{control_low:.3f}, {control_high:.3f}] "
             f"| {row['named_p_holm_adjusted']:.4g} | {'yes' if row['memory_positive'] else 'no'} |"
         )
-    lines.extend(["", f"{report['interpretation']}", ""])
+    lines.extend(["", report["interpretation"], ""])
+    if limits_marker:
+        lines.extend(["## Limits", limits.strip(), ""])
     atomic_text(REPORT_MD_PATH, "\n".join(lines))
 
 

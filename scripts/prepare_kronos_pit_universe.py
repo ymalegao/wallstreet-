@@ -13,13 +13,19 @@ import polars as pl
 from ws import calendar as cal
 from ws import universe
 from ws.store.atomic import atomic_text
-from ws.store.event_store import BarStore
+from ws.store.bar_loader import read_bar_store
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--assets", type=Path, default=Path("data/universe/alpaca_assets_2026-10-04.jsonl"))
     ap.add_argument("--daily-store", type=str, default="1Day_raw")
+    ap.add_argument(
+        "--additional-daily-store",
+        action="append",
+        default=[],
+        help="Additional provider store to append for symbols absent from the primary store",
+    )
     ap.add_argument("--start", type=date.fromisoformat, default=date(2024, 7, 1))
     ap.add_argument("--end", type=date.fromisoformat, default=date(2026, 7, 1), help="exclusive decision date")
     ap.add_argument("--top-n", type=int, default=25)
@@ -28,10 +34,27 @@ def main() -> None:
     if args.end <= args.start:
         raise ValueError("end must be after start")
 
-    assets = [json.loads(line) for line in args.assets.read_text().splitlines() if line.strip()]
+    if args.assets.suffix == ".json":
+        asset_payload = json.loads(args.assets.read_text())
+        assets = asset_payload.get("records", [])
+        if not assets:
+            raise ValueError(f"{args.assets} does not contain candidate records")
+        candidate_source = asset_payload.get("source", str(args.assets))
+        candidate_as_of = asset_payload.get("as_of", "unknown")
+        candidate_limitations = asset_payload.get("limitations", [])
+    else:
+        assets = [json.loads(line) for line in args.assets.read_text().splitlines() if line.strip()]
+        candidate_source = str(args.assets)
+        candidate_as_of = "current/inactive asset snapshot"
+        candidate_limitations = []
     candidates: list[dict[str, Any]] = universe.listed_stock_candidates(assets)
     symbols = sorted({str(asset["symbol"]) for asset in candidates})
-    daily = BarStore(Path("data"), args.daily_store).read(symbols)
+    daily_parts = [
+        read_bar_store(Path("data"), store, symbols)
+        for store in [args.daily_store, *args.additional_daily_store]
+    ]
+    daily = pl.concat([part for part in daily_parts if not part.is_empty()], how="diagonal_relaxed")
+    daily = daily.unique(subset=["symbol", "ts"], keep="first").sort(["symbol", "ts"])
     selected = universe.point_in_time_top_n(daily, symbols, args.start, args.end, args.top_n)
     if selected.is_empty():
         raise RuntimeError("No eligible ticker-sessions in the requested period")
@@ -63,17 +86,18 @@ def main() -> None:
             "median_dollar_volume_floor_usd": universe.MIN_DOLLAR_VOLUME,
             "median_window_sessions": universe.WINDOW,
             "all_features_lagged_one_session": True,
-            "input_daily_store": args.daily_store,
+            "input_daily_stores": [args.daily_store, *args.additional_daily_store],
         },
         "candidate_pool": {
-            "source": str(args.assets),
-            "as_of": "2026-10-04 current/inactive asset snapshot",
+            "source": candidate_source,
+            "as_of": candidate_as_of,
             "candidate_count": len(symbols),
             "limitations": [
-                "Price/liquidity ranking is point-in-time, but the candidate master is a current/inactive "
-                "snapshot, not historical exchange membership.",
-                "Known delisted names absent from the snapshot/bar cache (including BBBY) cannot enter; "
-                "survivorship-free coverage is not certified.",
+                *candidate_limitations,
+                "Price/liquidity ranking is point-in-time, but this candidate master is a current snapshot, "
+                "not certified historical exchange membership.",
+                "Symbols without daily bars cannot enter; delisted-company coverage remains limited by provider "
+                "history and data availability.",
                 "The 2024-07 to 2026-06 feature period is after Kronos's stated June 2024 pretraining "
                 "cutoff, but project-level price/universe research has touched overlapping dates.",
             ],

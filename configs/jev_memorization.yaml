@@ -40,8 +40,8 @@ cutoff_rule: A month is memory-positive when its Holm-adjusted one-sided exact-b
   not certify that the model has no relevant training overlap.
 results:
   question_set_sha256: 9911d11ad7ebf91a8dfb626cc84ffac83cadede62eebb85e8d68f13942a04f68
-  named_accuracy: null
-  masked_control_accuracy: null
+  named_accuracy: 0.5179977502812149
+  masked_control_accuracy: 0.5011248593925759
   detected_cutoff_month: null
   candidate_clean_window_start: null
   clean_window_status: UNESTABLISHED

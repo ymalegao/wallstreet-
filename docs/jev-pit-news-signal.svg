@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="580" viewBox="0 0 1100 580">
+<rect width="100%" height="100%" fill="white"/>
+<text x="550.0" y="36.0" font-size="23" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">JEV news signal versus price-only baselines</text>
+<text x="550.0" y="61.0" font-size="13" text-anchor="middle" fill="#555" font-family="Arial, sans-serif">2024-07-01 to 2026-07-01 · 25,050 labeled ticker-cycles</text>
+<text x="550.0" y="83.0" font-size="13" text-anchor="middle" fill="#555" font-family="Arial, sans-serif">Mean cross-sectional Spearman rank IC by decision cycle; bars show 5-session block-bootstrap 95% CIs</text>
+<line x1="120.0" y1="398.9" x2="1040.0" y2="398.9" stroke="#e5e5e5" stroke-width="1" />
+<text x="108.0" y="402.9" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">-0.10</text>
+<line x1="120.0" y1="339.5" x2="1040.0" y2="339.5" stroke="#e5e5e5" stroke-width="1" />
+<text x="108.0" y="343.5" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">-0.05</text>
+<line x1="120.0" y1="280.0" x2="1040.0" y2="280.0" stroke="#e5e5e5" stroke-width="1" />
+<text x="108.0" y="284.0" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">+0.00</text>
+<line x1="120.0" y1="220.5" x2="1040.0" y2="220.5" stroke="#e5e5e5" stroke-width="1" />
+<text x="108.0" y="224.5" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">+0.05</text>
+<line x1="120.0" y1="161.1" x2="1040.0" y2="161.1" stroke="#e5e5e5" stroke-width="1" />
+<text x="108.0" y="165.1" font-size="11" text-anchor="end" fill="#666" font-family="Arial, sans-serif">+0.10</text>
+<line x1="120.0" y1="280.0" x2="1040.0" y2="280.0" stroke="#444" stroke-width="1.5" />
+<rect x="221.3" y="280.0" width="104" height="1.3" fill="#247ba0" opacity="0.88"/>
+<line x1="273.3" y1="301.9" x2="273.3" y2="260.6" stroke="#222" stroke-width="1.5" />
+<line x1="265.3" y1="301.9" x2="281.3" y2="301.9" stroke="#222" stroke-width="1.5" />
+<line x1="265.3" y1="260.6" x2="281.3" y2="260.6" stroke="#222" stroke-width="1.5" />
+<text x="273.3" y="457.0" font-size="14" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">JEV news</text>
+<text x="273.3" y="300.3" font-size="12" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">-0.001</text>
+<text x="273.3" y="479.0" font-size="11" text-anchor="middle" fill="#555" font-family="Arial, sans-serif">51.2% positive cycles</text>
+<rect x="528.0" y="280.0" width="104" height="1.6" fill="#f18f01" opacity="0.88"/>
+<line x1="580.0" y1="335.0" x2="580.0" y2="228.9" stroke="#222" stroke-width="1.5" />
+<line x1="572.0" y1="335.0" x2="588.0" y2="335.0" stroke="#222" stroke-width="1.5" />
+<line x1="572.0" y1="228.9" x2="588.0" y2="228.9" stroke="#222" stroke-width="1.5" />
+<text x="580.0" y="457.0" font-size="14" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">20-session reversal</text>
+<text x="580.0" y="300.6" font-size="12" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">-0.001</text>
+<text x="580.0" y="479.0" font-size="11" text-anchor="middle" fill="#555" font-family="Arial, sans-serif">49.8% positive cycles</text>
+<rect x="834.7" y="217.8" width="104" height="62.2" fill="#8e5ea2" opacity="0.88"/>
+<line x1="886.7" y1="281.5" x2="886.7" y2="155.0" stroke="#222" stroke-width="1.5" />
+<line x1="878.7" y1="281.5" x2="894.7" y2="281.5" stroke="#222" stroke-width="1.5" />
+<line x1="878.7" y1="155.0" x2="894.7" y2="155.0" stroke="#222" stroke-width="1.5" />
+<text x="886.7" y="457.0" font-size="14" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">12–1 momentum</text>
+<text x="886.7" y="209.8" font-size="12" text-anchor="middle" fill="#222" font-family="Arial, sans-serif">+0.052</text>
+<text x="886.7" y="479.0" font-size="11" text-anchor="middle" fill="#555" font-family="Arial, sans-serif">57.7% positive cycles</text>
+<text x="550.0" y="550.0" font-size="12" text-anchor="middle" fill="#555" font-family="Arial, sans-serif">Exploratory feature test, not a trading backtest; historical news latency and full delisted coverage remain limitations.</text>
+</svg>

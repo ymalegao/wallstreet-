@@ -1,8 +1,9 @@
-"""Point-in-time tradable universe, built from our own bars (no hindsight index membership).
+"""Point-in-time tradable universe, built from our own bars without index membership lists.
 
 A ticker is eligible on session t if, using only sessions before t, its last close >= $5 and its
-20-session median dollar volume >= $20M. Survivorship-free provided bars exist for delisted names
-(checked by the API probe).
+20-session median dollar volume >= $20M. The selector avoids index-membership hindsight, but its
+survivorship coverage still depends on the candidate master and historical bars available for
+inactive and delisted names.
 """
 
 from __future__ import annotations

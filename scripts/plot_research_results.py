@@ -303,6 +303,90 @@ def intraday_svg(out: Path) -> None:
     out.write_text("\n".join(parts) + "\n")
 
 
+def jev_pit_svg(out: Path) -> None:
+    report = json.loads(Path("docs/jev-pit-news-signal.json").read_text())
+    labels = [
+        ("jev_signal", "JEV news", "#247ba0"),
+        ("reversal_20", "20-session reversal", "#f18f01"),
+        ("momentum_12_1", "12–1 momentum", "#8e5ea2"),
+    ]
+    metrics = report["cross_sectional_metrics"]
+    lows = [float(metrics[key]["block5_session_95pct_ci"][0]) for key, _, _ in labels]
+    highs = [float(metrics[key]["block5_session_95pct_ci"][1]) for key, _, _ in labels]
+    bound = max(0.1, max(abs(value) for value in lows + highs) * 1.2)
+    lo, hi = -bound, bound
+    width, height = 1100, 580
+    left, right, top, bottom = 120, 1040, 130, 430
+
+    def ymap(value: float) -> float:
+        return bottom - (value - lo) / (hi - lo) * (bottom - top)
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        '<rect width="100%" height="100%" fill="white"/>',
+        text(width / 2, 36, "JEV news signal versus price-only baselines", 23, "middle"),
+        text(
+            width / 2,
+            61,
+            f"{report['period']['start_inclusive']} to {report['period']['end_exclusive']} · "
+            f"{report['samples_with_complete_5d_prices']:,} labeled ticker-cycles",
+            13,
+            "middle",
+            "#555",
+        ),
+        text(
+            width / 2,
+            83,
+            "Mean cross-sectional Spearman rank IC by decision cycle; bars show 5-session block-bootstrap 95% CIs",
+            13,
+            "middle",
+            "#555",
+        ),
+    ]
+    step = max(0.05, round((hi - lo) / 6 / 0.05) * 0.05)
+    tick = math.ceil(lo / step) * step
+    while tick <= hi:
+        y = ymap(tick)
+        parts.extend([line(left, y, right, y, "#e5e5e5"), text(left - 12, y + 4, f"{tick:+.2f}", 11, "end", "#666")])
+        tick += step
+    zero = ymap(0)
+    parts.append(line(left, zero, right, zero, "#444", 1.5))
+    slot = (right - left) / len(labels)
+    for i, (key, label, color) in enumerate(labels):
+        row = metrics[key]
+        x = left + slot * (i + 0.5)
+        value = float(row["mean_cycle_rank_ic"])
+        low, high = map(float, row["block5_session_95pct_ci"])
+        yv = ymap(value)
+        parts.append(
+            f'<rect x="{x - 52:.1f}" y="{min(yv, zero):.1f}" width="104" '
+            f'height="{max(1, abs(zero - yv)):.1f}" fill="{color}" opacity="0.88"/>'
+        )
+        parts.extend(
+            [
+                line(x, ymap(low), x, ymap(high), "#222", 1.5),
+                line(x - 8, ymap(low), x + 8, ymap(low), "#222", 1.5),
+                line(x - 8, ymap(high), x + 8, ymap(high), "#222", 1.5),
+                text(x, bottom + 27, label, 14, "middle"),
+                text(x, yv - 8 if value >= 0 else yv + 19, f"{value:+.3f}", 12, "middle"),
+                text(x, bottom + 49, f"{row['fraction_positive_cycles']:.1%} positive cycles", 11, "middle", "#555"),
+            ]
+        )
+    parts.append(
+        text(
+            width / 2,
+            550,
+            "Exploratory feature test, not a trading backtest; historical news latency and full delisted coverage "
+            "remain limitations.",
+            12,
+            "middle",
+            "#555",
+        )
+    )
+    parts.append("</svg>")
+    out.write_text("\n".join(parts) + "\n")
+
+
 def kronos_pit_svg(out: Path) -> None:
     reports = [
         ("Morning / 15m", json.loads(Path("docs/kronos-pit-2024-2026-15m-report.json").read_text())),
@@ -418,7 +502,8 @@ def main() -> None:
     kronos_svg(Path("docs/kronos-feature-visual.svg"))
     intraday_svg(Path("docs/kronos-intraday-visual.svg"))
     kronos_pit_svg(Path("docs/kronos-pit-2024-2026-visual.svg"))
-    print("Wrote replay and Kronos daily/intraday SVG charts")
+    jev_pit_svg(Path("docs/jev-pit-news-signal.svg"))
+    print("Wrote replay, JEV, and Kronos research SVG charts")
 
 
 if __name__ == "__main__":
