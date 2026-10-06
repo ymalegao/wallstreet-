@@ -38,12 +38,14 @@ def sessions(start: date, end: date) -> list[date]:
     return result
 
 
-def bars_for_session(rows: list[dict[str, Any]], symbols: set[str], session: date) -> list[Bar]:
+def bars_for_session(
+    rows: list[dict[str, Any]], symbols: set[str] | None, session: date
+) -> list[Bar]:
     ts = session_open(session)
     result = []
     for row in rows:
         symbol = str(row.get("T", "")).upper()
-        if symbol not in symbols:
+        if symbols is not None and symbol not in symbols:
             continue
         result.append(
             Bar(
@@ -68,6 +70,11 @@ def main() -> None:
         type=Path,
         default=Path("data/universe/massive-reference-2026-10-05/stock-candidates.json"),
     )
+    parser.add_argument(
+        "--all-tickers",
+        action="store_true",
+        help="Cache every ticker with a grouped bar for each date instead of filtering to a reference list",
+    )
     parser.add_argument("--start", type=date.fromisoformat, default=date(2024, 7, 1))
     parser.add_argument("--end", type=date.fromisoformat, default=date(2026, 7, 10), help="exclusive end")
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
@@ -79,8 +86,12 @@ def main() -> None:
     if not api_key:
         raise SystemExit("MASSIVE_API_KEY is missing; key value was not read from the command line")
 
-    allowed = candidate_symbols(args.candidates)
-    allowed_digest = hashlib.sha256("\n".join(sorted(allowed)).encode()).hexdigest()
+    allowed = None if args.all_tickers else candidate_symbols(args.candidates)
+    allowed_digest = (
+        "ALL_TICKERS_PER_SESSION"
+        if allowed is None
+        else hashlib.sha256("\n".join(sorted(allowed)).encode()).hexdigest()
+    )
     calendar_sessions = sessions(args.start, args.end)
     store = GroupedBarStore(args.data_dir, STORE_NAME)
     state_path = args.data_dir / "state" / f"{STORE_NAME}-{args.start}-{args.end}.json"
@@ -101,7 +112,8 @@ def main() -> None:
         "adjustment": "unadjusted",
         "include_otc": False,
         "candidate_symbols_sha256": allowed_digest,
-        "candidate_symbol_count": len(allowed),
+        "candidate_symbol_count": len(allowed) if allowed is not None else None,
+        "universe_mode": "all symbols returned for each session" if allowed is None else "fixed candidate list",
         "start_inclusive": args.start.isoformat(),
         "end_exclusive": args.end.isoformat(),
         "trading_sessions": len(calendar_sessions),
@@ -143,7 +155,8 @@ def main() -> None:
                 "adjustment": "unadjusted",
                 "include_otc": False,
                 "candidate_symbols_sha256": allowed_digest,
-                "candidate_symbol_count": len(allowed),
+                "candidate_symbol_count": len(allowed) if allowed is not None else None,
+                "universe_mode": "all symbols returned for each session" if allowed is None else "fixed candidate list",
                 "start_inclusive": args.start.isoformat(),
                 "end_exclusive": args.end.isoformat(),
                 "trading_sessions": len(calendar_sessions),

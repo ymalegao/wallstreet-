@@ -1,0 +1,65 @@
+{
+  "status": "EXPLORATORY_SURVIVORSHIP_COVERAGE_AUDIT",
+  "period": {
+    "start_inclusive": "2024-10-07",
+    "end_exclusive": "2026-07-01"
+  },
+  "candidate_pool_source": "Alpaca current-asset snapshot plus partial Massive inactive common-stock reference",
+  "candidate_as_of": "2026-10-05",
+  "daily_bar_stores": [
+    "grouped:massive_1Day_raw"
+  ],
+  "sessions_compared": 413,
+  "sessions_with_changed_top25": 0,
+  "prior_candidate_count": 6537,
+  "revised_candidate_count": 7384,
+  "revised_candidate_symbols_with_cached_daily_bars": 5617,
+  "revised_candidate_symbols_without_cached_daily_bars": 1767,
+  "inactive_candidate_symbols_in_revised_pool": 1863,
+  "inactive_candidate_symbols_with_cached_daily_bars": 268,
+  "newly_selected_symbols": [],
+  "newly_selected_symbol_ticker_sessions": {},
+  "newly_selected_currently_inactive_symbols": {},
+  "selected_inactive_ticker_sessions": 0,
+  "known_delisted_audit": {
+    "SIVB": {
+      "in_candidate_pool": false,
+      "daily_bars_cached": false,
+      "selected_in_revised_window": false,
+      "delisted_utc": null
+    },
+    "FRC": {
+      "in_candidate_pool": false,
+      "daily_bars_cached": false,
+      "selected_in_revised_window": false,
+      "delisted_utc": null
+    },
+    "BBBY": {
+      "in_candidate_pool": false,
+      "daily_bars_cached": true,
+      "selected_in_revised_window": false,
+      "delisted_utc": null
+    }
+  },
+  "candidate_reference_coverage": {
+    "massive_cached_inactive_xnas_records": 129700,
+    "massive_cached_pages": 1288,
+    "massive_inactive_crawl_complete": false,
+    "massive_cached_ticker_range": [
+      "A",
+      "EQFN"
+    ],
+    "alpaca_candidate_count": 6537,
+    "massive_inactive_candidate_count": 1003
+  },
+  "limitations": [
+    "Point-in-time grouped bars can include securities no longer active, but do not identify historical exchange membership or an inactive/delisting status by themselves.",
+    "Only symbols with provider bars can be ranked; absent bars can still hide formerly liquid delisted stocks.",
+    "Inactive is measured as of the current reference snapshot, not the security's status on each session.",
+    "This audit corrects candidate coverage where data exists; it does not certify zero survivorship bias.",
+    "The Massive inactive-common-stock crawl is incomplete: it contains only XNAS records through ticker EQFN, is alphabetically truncated, and has no XNYS/XASE inactive records.",
+    "The candidate extension is therefore incomplete and non-random; results quantify only securities represented in this cached subset.",
+    "Historical eligibility is based on point-in-time daily bars and the project liquidity rules, not certified historical exchange membership.",
+    "The same Massive grouped daily bars are used for the current-candidate control and the expanded candidate universe to isolate candidate-pool changes."
+  ]
+}

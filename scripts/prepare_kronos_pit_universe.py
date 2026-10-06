@@ -19,6 +19,11 @@ from ws.store.bar_loader import read_bar_store
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--assets", type=Path, default=Path("data/universe/alpaca_assets_2026-10-04.jsonl"))
+    ap.add_argument(
+        "--all-tickers-from-bars",
+        action="store_true",
+        help="Use every symbol present in the selected daily stores, including securities no longer active",
+    )
     ap.add_argument("--daily-store", type=str, default="1Day_raw")
     ap.add_argument(
         "--additional-daily-store",
@@ -34,27 +39,40 @@ def main() -> None:
     if args.end <= args.start:
         raise ValueError("end must be after start")
 
-    if args.assets.suffix == ".json":
-        asset_payload = json.loads(args.assets.read_text())
-        assets = asset_payload.get("records", [])
-        if not assets:
-            raise ValueError(f"{args.assets} does not contain candidate records")
-        candidate_source = asset_payload.get("source", str(args.assets))
-        candidate_as_of = asset_payload.get("as_of", "unknown")
-        candidate_limitations = asset_payload.get("limitations", [])
+    if args.all_tickers_from_bars:
+        symbols: list[str] = []
+        candidate_source = "symbols with grouped daily bars on each historical session"
+        candidate_as_of = "point-in-time traded-ticker observations"
+        candidate_limitations = [
+            "This universe includes securities with a provider-reported daily bar, whether active today or not; "
+            "it is not a certified historical exchange-membership file.",
+            "Securities with no provider bar on a date cannot enter, so delisted-security coverage depends on "
+            "the provider's grouped aggregates and exchange scope.",
+        ]
     else:
-        assets = [json.loads(line) for line in args.assets.read_text().splitlines() if line.strip()]
-        candidate_source = str(args.assets)
-        candidate_as_of = "current/inactive asset snapshot"
-        candidate_limitations = []
-    candidates: list[dict[str, Any]] = universe.listed_stock_candidates(assets)
-    symbols = sorted({str(asset["symbol"]) for asset in candidates})
+        if args.assets.suffix == ".json":
+            asset_payload = json.loads(args.assets.read_text())
+            assets = asset_payload.get("records", [])
+            if not assets:
+                raise ValueError(f"{args.assets} does not contain candidate records")
+            candidate_source = asset_payload.get("source", str(args.assets))
+            candidate_as_of = asset_payload.get("as_of", "unknown")
+            candidate_limitations = asset_payload.get("limitations", [])
+        else:
+            assets = [json.loads(line) for line in args.assets.read_text().splitlines() if line.strip()]
+            candidate_source = str(args.assets)
+            candidate_as_of = "current/inactive asset snapshot"
+            candidate_limitations = []
+        candidates: list[dict[str, Any]] = universe.listed_stock_candidates(assets)
+        symbols = sorted({str(asset["symbol"]) for asset in candidates})
     daily_parts = [
-        read_bar_store(Path("data"), store, symbols)
+        read_bar_store(Path("data"), store, None if args.all_tickers_from_bars else symbols)
         for store in [args.daily_store, *args.additional_daily_store]
     ]
     daily = pl.concat([part for part in daily_parts if not part.is_empty()], how="diagonal_relaxed")
     daily = daily.unique(subset=["symbol", "ts"], keep="first").sort(["symbol", "ts"])
+    if args.all_tickers_from_bars:
+        symbols = sorted(daily["symbol"].unique().to_list()) if not daily.is_empty() else []
     selected = universe.point_in_time_top_n(daily, symbols, args.start, args.end, args.top_n)
     if selected.is_empty():
         raise RuntimeError("No eligible ticker-sessions in the requested period")
@@ -94,10 +112,16 @@ def main() -> None:
             "candidate_count": len(symbols),
             "limitations": [
                 *candidate_limitations,
-                "Price/liquidity ranking is point-in-time, but this candidate master is a current snapshot, "
-                "not certified historical exchange membership.",
-                "Symbols without daily bars cannot enter; delisted-company coverage remains limited by provider "
-                "history and data availability.",
+                *(
+                    []
+                    if args.all_tickers_from_bars
+                    else [
+                        "Price/liquidity ranking is point-in-time, but this candidate master is a current snapshot, "
+                        "not certified historical exchange membership.",
+                        "Symbols without daily bars cannot enter; delisted-company coverage remains limited by "
+                        "provider history and data availability.",
+                    ]
+                ),
                 "The 2024-07 to 2026-06 feature period is after Kronos's stated June 2024 pretraining "
                 "cutoff, but project-level price/universe research has touched overlapping dates.",
             ],
