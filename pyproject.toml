@@ -28,6 +28,9 @@ dev = [
     "ruff>=0.16.10",
     "types-pyyaml>=6.0.12.20260906",
 ]
+research = [
+    "scikit-learn>=1.6",
+]
 
 [tool.ruff]
 line-length = 120

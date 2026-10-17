@@ -120,9 +120,10 @@ def bars_step(
         raise RuntimeError("Bar provenance changed; use a new data directory rather than mixing feeds/adjustments")
     atomic_text(manifest, json.dumps(provenance, indent=2) + "\n")
     with bars.make_client(st.alpaca_key or "", st.alpaca_secret or "") as client:
+        symbol_batch_size = 10 if intraday else 100
         for s, e in months(start, end):
-            for offset in range(0, len(symbols), 10):
-                syms = symbols[offset : offset + 10]
+            for offset in range(0, len(symbols), symbol_batch_size):
+                syms = symbols[offset : offset + symbol_batch_size]
                 key = State.key(start=s, end=e, symbols=syms, **provenance)
                 if key in state.done:
                     continue
