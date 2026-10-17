@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import json
 import time
 import uuid
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from ws.core.clock import Clock, SimClock, Tick
 from ws.core.event_log import EventLogger
@@ -20,6 +23,15 @@ class ReplayMismatch(AssertionError):
     """A replayed node emitted bytes different from the recorded run."""
 
 
+class NodeSpec(BaseModel):
+    """Configuration for constructing one pipeline node."""
+
+    model_config = ConfigDict(frozen=True)
+
+    cls: str
+    kwargs: dict[str, Any] = Field(default_factory=dict)
+
+
 class PipelineBuilder:
     def __init__(self) -> None:
         self._nodes: list[Node] = []
@@ -28,14 +40,28 @@ class PipelineBuilder:
         self._nodes.append(node)
         return self
 
-    def build(self, *, executors: Mapping[str, Executor] | None = None) -> Pipeline:
-        return Pipeline(self._nodes, executors=executors)
+    def build(
+        self,
+        *,
+        inputs: Iterable[type[Message]] = (),
+        executors: Mapping[str, Executor] | None = None,
+    ) -> Pipeline:
+        """Build the graph, treating declared input message types as coordinator supplied."""
+        return Pipeline(self._nodes, inputs=inputs, executors=executors)
 
 
 class Pipeline:
-    def __init__(self, nodes: Sequence[Node], *, executors: Mapping[str, Executor] | None = None) -> None:
+    def __init__(
+        self,
+        nodes: Sequence[Node],
+        *,
+        inputs: Iterable[type[Message]] = (),
+        executors: Mapping[str, Executor] | None = None,
+    ) -> None:
         self.nodes = tuple(nodes)
+        self.external_inputs = frozenset(inputs)
         self.executors = {"async": AsyncExecutor(), **(executors or {})}
+        self.config_specs: list[dict[str, Any]] | None = None
         self.levels = self._validate_and_order()
 
     @classmethod
@@ -43,9 +69,14 @@ class Pipeline:
         return PipelineBuilder()
 
     @classmethod
-    def build(cls, *nodes: Node, executors: Mapping[str, Executor] | None = None) -> Pipeline:
+    def build(
+        cls,
+        *nodes: Node,
+        inputs: Iterable[type[Message]] = (),
+        executors: Mapping[str, Executor] | None = None,
+    ) -> Pipeline:
         """Convenience for small graphs; prefer ``builder().add(...).build()``."""
-        return cls(nodes, executors=executors)
+        return cls(nodes, inputs=inputs, executors=executors)
 
     def _validate_and_order(self) -> tuple[tuple[Node, ...], ...]:
         if not self.nodes:
@@ -60,10 +91,16 @@ class Pipeline:
             writers[node.writes] = node
             if node.policy.executor not in self.executors:
                 raise ValueError(f"no executor registered for {node.policy.executor!r} ({node.name})")
+        overlap = set(writers).intersection(self.external_inputs)
+        if overlap:
+            names = sorted(message_type.__name__ for message_type in overlap)
+            raise ValueError(f"message types cannot be both externally supplied and node-written: {names}")
         for node in self.nodes:
             for message_type in node.reads:
-                if message_type not in writers:
+                if message_type not in writers and message_type not in self.external_inputs:
                     raise ValueError(f"{node.name} reads unwritten message {message_type.__name__}")
+                if message_type in self.external_inputs:
+                    continue
                 upstream = writers[message_type]
                 if upstream is node:
                     raise ValueError(f"{node.name} reads its own output")
@@ -75,7 +112,12 @@ class Pipeline:
         levels: list[tuple[Node, ...]] = []
         while remaining:
             ready = tuple(
-                node for node in remaining if all(writers[message_type] in completed for message_type in node.reads)
+                node
+                for node in remaining
+                if all(
+                    message_type in self.external_inputs or writers[message_type] in completed
+                    for message_type in node.reads
+                )
             )
             if not ready:
                 raise ValueError("pipeline graph contains a cycle")
@@ -92,13 +134,29 @@ class Pipeline:
         log_path: Path,
         clock: Clock | None = None,
         tools: Any = None,
+        inputs: Mapping[type[Message], Message] | None = None,
     ) -> dict[type[Message], Message | Missing]:
         logger = EventLogger(log_path)
         active_clock = clock or SimClock([tick])
         if active_clock.tick() != tick:
             raise ValueError("clock's current tick does not match requested pipeline tick")
-        messages: dict[type[Message], Message | Missing] = {}
-        logger.emit("run_started", run_id=run_id, tick=tick.id, node_count=len(self.nodes))
+        supplied = dict(inputs or {})
+        if set(supplied) != set(self.external_inputs):
+            missing = sorted(message_type.__name__ for message_type in self.external_inputs - set(supplied))
+            unexpected = sorted(message_type.__name__ for message_type in set(supplied) - self.external_inputs)
+            raise ValueError(
+                f"external inputs do not match graph declarations: missing={missing}, unexpected={unexpected}"
+            )
+        for message_type, external_message in supplied.items():
+            if not isinstance(external_message, message_type):
+                raise TypeError(
+                    f"external input for {message_type.__name__} has type {type(external_message).__name__}"
+                )
+            if external_message.tick != tick:
+                raise ValueError(f"external input {message_type.__name__} is for a different tick")
+        messages: dict[type[Message], Message | Missing] = dict(supplied)
+        outputs: dict[type[Message], Message | Missing] = {}
+        logger.emit("run_started", run_id=run_id, tick=tick.id, node_count=len(self.nodes), config=self.config_specs)
         logger.emit("tick_started", run_id=run_id, tick=tick.id)
         try:
             for level in self.levels:
@@ -109,11 +167,12 @@ class Pipeline:
                             self._run_node(node, active_clock, run_id, logger, tools, messages)
                         )
                 results = [tasks[node].result() for node in level]
-                for node, message in zip(level, results, strict=True):
-                    messages[node.writes] = message
+                for node, node_message in zip(level, results, strict=True):
+                    messages[node.writes] = node_message
+                    outputs[node.writes] = node_message
             logger.emit("tick_completed", run_id=run_id, tick=tick.id)
-            logger.emit("run_completed", run_id=run_id, outputs=len(messages))
-            return messages
+            logger.emit("run_completed", run_id=run_id, outputs=len(outputs))
+            return outputs
         except Exception as exc:
             error_type, detail = _failure_info(exc)
             logger.emit("run_failed", run_id=run_id, tick=tick.id, error=error_type, detail=detail)
@@ -126,12 +185,23 @@ class Pipeline:
         run_id: str,
         log_path: Path,
         tools: Any = None,
+        inputs_for_tick: Callable[[Tick], Mapping[type[Message], Message]] | None = None,
     ) -> list[dict[type[Message], Message | Missing]]:
         ordered = tuple(ticks)
         clock = SimClock(ordered)
         outputs: list[dict[type[Message], Message | Missing]] = []
         for tick in clock:
-            outputs.append(await self.run(tick, run_id=run_id, log_path=log_path, clock=clock, tools=tools))
+            tick_inputs = inputs_for_tick(tick) if inputs_for_tick is not None else None
+            outputs.append(
+                await self.run(
+                    tick,
+                    run_id=run_id,
+                    log_path=log_path,
+                    clock=clock,
+                    tools=tools,
+                    inputs=tick_inputs,
+                )
+            )
         return outputs
 
     async def replay(
@@ -142,6 +212,7 @@ class Pipeline:
         recorded_run_id: str,
         replay_log: Path,
         tools: Any = None,
+        inputs_for_tick: Callable[[Tick], Mapping[type[Message], Message]] | None = None,
     ) -> list[dict[type[Message], Message | Missing]]:
         """Rerun a deterministic graph and compare every output to recorded hashes."""
         expected = _recorded_outputs(recorded_log, recorded_run_id)
@@ -153,7 +224,15 @@ class Pipeline:
         replay_id = f"{recorded_run_id}-replay-{uuid.uuid4().hex[:8]}"
         clock = SimClock(ordered)
         for tick in clock:
-            result = await self.run(tick, run_id=replay_id, log_path=replay_log, clock=clock, tools=tools)
+            tick_inputs = inputs_for_tick(tick) if inputs_for_tick is not None else None
+            result = await self.run(
+                tick,
+                run_id=replay_id,
+                log_path=replay_log,
+                clock=clock,
+                tools=tools,
+                inputs=tick_inputs,
+            )
             outputs.append(result)
             for message in result.values():
                 actual[(tick.id, message.producer)] = message_digest(message)
@@ -179,9 +258,7 @@ class Pipeline:
         ctx = NodeContext(clock=clock, inputs=node_inputs, log=logger, tools=tools, run_id=run_id)
         for attempt in range(node.policy.retries + 1):
             started = time.perf_counter()
-            logger.emit(
-                "node_started", run_id=run_id, tick=clock.tick().id, node=node.name, attempt=attempt + 1
-            )
+            logger.emit("node_started", run_id=run_id, tick=clock.tick().id, node=node.name, attempt=attempt + 1)
             try:
                 executor = self.executors[node.policy.executor]
                 output = await asyncio.wait_for(executor.execute(node, ctx), timeout=node.policy.timeout_s)
@@ -234,6 +311,37 @@ class Pipeline:
                     return missing
                 raise
         raise AssertionError("retry loop exited unexpectedly")
+
+
+def build_from_config(
+    specs: Sequence[NodeSpec],
+    *,
+    resources: Mapping[str, Any],
+    inputs: Iterable[type[Message]] = (),
+) -> Pipeline:
+    """Import configured node classes, resolve named resources, and validate their graph."""
+    builder = Pipeline.builder()
+    for spec in specs:
+        module_name, separator, class_name = spec.cls.rpartition(".")
+        if not separator:
+            raise ValueError(f"node class path must be dotted: {spec.cls!r}")
+        module = importlib.import_module(module_name)
+        node_class = getattr(module, class_name, None)
+        if not isinstance(node_class, type) or not issubclass(node_class, Node):
+            raise TypeError(f"configured class {spec.cls!r} is not a Node subclass")
+        kwargs: dict[str, Any] = {}
+        for key, value in spec.kwargs.items():
+            if isinstance(value, str) and value.startswith("@"):
+                resource_name = value[1:]
+                if resource_name not in resources:
+                    raise ValueError(f"unknown resource @{resource_name} for {spec.cls}")
+                kwargs[key] = resources[resource_name]
+            else:
+                kwargs[key] = value
+        builder.add(node_class(**kwargs))
+    pipeline = builder.build(inputs=inputs)
+    pipeline.config_specs = [spec.model_dump(mode="json") for spec in specs]
+    return pipeline
 
 
 def _input_digest(message: Message | Missing) -> str:

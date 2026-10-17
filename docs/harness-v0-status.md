@@ -1,34 +1,25 @@
-# Current status
+# Pipeline v0 status
 
-This branch contains a small research harness scaffold. The old prototype was kept on `research-harness-v0-checkpoint`; this branch is intended to be the easy place to understand and continue the new design.
+This branch now has an end-to-end daily research path. The earlier prototype remains on `research-harness-v0-checkpoint`.
 
-## What is here
+## What is implemented
 
-- **Node runtime** (`src/ws/core/`): immutable messages, a simulation clock, a node contract, DAG validation, concurrent execution by graph level, explicit optional-node failures, and JSONL event logging with replay hashes.
-- **Point-in-time bars** (`src/ws/store/pit_bars.py`): Parquet storage with `event_time` and `available_at`; the read method takes a clock so callers cannot ask for later data.
-- **Training example** (`src/ws/research/demo.py`): synthetic bars → lagged features → scikit-learn gradient-boosting baseline → evaluation and run card. It is CPU-only and intentionally makes no market-performance claim.
-- **Trading mechanics**: deterministic allocation and risk components, a transaction-cost function, and a daily-bar simulator. Risk constraints are not yet wired into that simulator.
-- **Data conversion**: the universe snapshot and PIT conversion scripts are present. The raw Alpaca bar downloader from the previous prototype was removed, so conversion requires an existing raw-bar cache.
+- **Coordinator boundary:** each tick receives typed `MarketSnapshot` and `PortfolioState` messages. `SnapshotProvider` is outside the DAG and reads the preloaded `BarHistory`.
+- **Five-node graph:** features → 12-1 momentum scores → equal-weight targets → deterministic risk → broker orders. `Execution` alone receives the mutable broker resource.
+- **Replayable runtime:** configured node specs are logged, DataFrame hashes are canonical, and replay compares each node output digest.
+- **Daily simulation:** decisions happen at close plus 30 minutes and orders fill at the next XNYS open with transaction costs.
+- **Historical ingestion:** the Alpaca downloader pages through adjusted daily bars and writes to the PIT store. The CLI exposes separate `download-bars` and `backtest` commands.
+- **Acceptance coverage:** the synthetic fixture exercises formulas, point-in-time filtering, orders, next-open fills, one-year backtest output, replay, and the equal-weight sanity check. Tests make no network calls.
 
-## Try the model example
+## Run it
+
+See [`pipeline-v0-runbook.md`](pipeline-v0-runbook.md) for the download and backtest commands. Run the offline acceptance suite with:
 
 ```bash
-uv sync --group dev --group research
-uv run python -m ws.research.demo
+uv run pytest -q
 ```
 
-The demo writes generated inputs, the event log, and a run card to ignored `artifacts/research_demo/`.
+## Limits to keep visible
 
-## Data limits
-
-The checked-in universe file is a dated iShares OEF holdings proxy, not an official historical S&P 100 constituent archive. Applying today's members to older dates creates survivorship bias. The local raw bars and snapshots are ignored by Git and are not included in this branch. Bars are unadjusted; corporate actions and reliable historical `available_at` records are not implemented. Do not use this slice to claim backtest alpha.
-
-## Next useful steps
-
-1. Agree on the first data source and universe, then add a small reproducible data fetcher with source timestamps.
-2. Add point-in-time corporate actions and historical membership before making long-horizon claims.
-3. Train a chronological baseline on real data and compare it with a zero-return and momentum baseline.
-4. Wire portfolio and risk components into the simulator, then cross-check against a second engine.
-
-The complete proposed architecture and open design decisions are in [`system-design.md`](system-design.md).
+The checked-in universe is a dated iShares OEF holdings proxy with 101 tickers. Applying today's proxy to older dates creates survivorship bias. The Alpaca endpoint's historical adjustment is not a point-in-time corporate-action archive, and `available_at` is modeled as close plus 15 minutes rather than taken from a vendor first-seen record. A downloaded history can validate the data and execution path, but does not establish leakage-free alpha. A point-in-time vendor archive and historical universe membership remain necessary before making long-horizon performance claims.
 

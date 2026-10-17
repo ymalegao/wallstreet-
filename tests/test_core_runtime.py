@@ -62,6 +62,7 @@ def ten_ticks() -> list[Tick]:
 def test_toy_pipeline_runs_ten_ticks_and_replays_identically(tmp_path: Path) -> None:
     ticks = ten_ticks()
     pipeline = toy_pipeline()
+    assert [node.name for node in pipeline.levels[0]] == ["constant"]
     recorded_log = tmp_path / "toy.jsonl"
     replay_log = tmp_path / "replay.jsonl"
 
@@ -145,9 +146,7 @@ def test_required_node_failure_cancels_other_nodes_at_same_level(tmp_path: Path)
 
     async def run() -> None:
         with pytest.raises(ExceptionGroup) as error:
-            await pipeline.run(
-                ten_ticks()[0], run_id="fail-closed", log_path=tmp_path / "failed.jsonl"
-            )
+            await pipeline.run(ten_ticks()[0], run_id="fail-closed", log_path=tmp_path / "failed.jsonl")
         assert "required input failed" in repr(error.value.exceptions)
 
     asyncio.run(run())
@@ -179,9 +178,7 @@ def test_optional_node_failure_is_explicit_and_downstream_can_degrade(tmp_path: 
             return DegradedValue(tick=ctx.tick, producer=self.name, value=int(isinstance(missing, Missing)))
 
     pipeline = Pipeline.builder().add(OptionalFailure(policy=Policy(required=False))).add(Degrade()).build()
-    result = asyncio.run(
-        pipeline.run(ten_ticks()[0], run_id="optional", log_path=tmp_path / "optional.jsonl")
-    )
+    result = asyncio.run(pipeline.run(ten_ticks()[0], run_id="optional", log_path=tmp_path / "optional.jsonl"))
     assert isinstance(result[OptionalValue], Missing)
     assert result[DegradedValue].value == 1
 

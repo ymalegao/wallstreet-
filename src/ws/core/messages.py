@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import pickle
 from collections.abc import Mapping
 from datetime import date, datetime
 from typing import Any, TypeVar, cast
 
+import polars as pl
 from pydantic import BaseModel, ConfigDict
 
 from ws.core.clock import Tick
@@ -61,6 +63,18 @@ class Inputs:
 
 def jsonable(value: Any) -> Any:
     """Convert supported payloads to deterministic JSON-compatible values."""
+    if isinstance(value, pl.DataFrame):
+        columns = sorted(value.columns)
+        frame = value.select(columns)
+        if columns:
+            frame = frame.sort(columns)
+        buffer = io.BytesIO()
+        frame.write_ipc(buffer, compression="uncompressed")
+        return {
+            "frame_sha256": hashlib.sha256(buffer.getvalue()).hexdigest(),
+            "rows": frame.height,
+            "columns": columns,
+        }
     if hasattr(value, "to_dicts"):
         return jsonable(value.to_dicts())
     if isinstance(value, BaseModel):
