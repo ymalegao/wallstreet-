@@ -9,7 +9,7 @@ from pydantic import ConfigDict
 from ws.core import Message, Node, NodeContext, Pipeline
 from ws.core.clock import SimClock, Tick
 from ws.core.messages import message_bytes
-from ws.schema import Bar
+from ws.bars import Bar
 from ws.store.pit_bars import PITBarStore, daily_bar_to_pit
 
 

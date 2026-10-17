@@ -11,7 +11,7 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from ws.core.clock import Clock
-from ws.schema import Bar
+from ws.bars import Bar
 from ws.store.atomic import atomic_path, file_lock
 
 NEW_YORK = ZoneInfo("America/New_York")

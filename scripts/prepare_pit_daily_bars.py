@@ -11,7 +11,7 @@ from pathlib import Path
 
 import polars as pl
 
-from ws.schema import Bar
+from ws.bars import Bar
 from ws.store.atomic import atomic_path, atomic_text
 from ws.store.pit_bars import PITBarStore, daily_bar_to_pit
 

@@ -1,32 +1,55 @@
-# wallstreet-
+# Multi-Agent Trading Research Harness
 
-Event-driven US-equity trading system: news and filings → open JEV decision model + Kronos → deterministic risk governor → Alpaca.
-Design: `docs/01-research-spec.md` (evidence, metrics, gates) and `docs/02-design-spec.md` (architecture, build order, evaluation).
+A small, auditable starting point for researching daily U.S. equity strategies. The main idea is to make each pipeline step a typed `Node`, enforce point-in-time data access through a shared clock, and keep portfolio and risk decisions deterministic.
 
-## Harness-first v0 scaffold
-The new `ws.core` package supplies typed, composable nodes, a clock-bound DAG runtime, and deterministic JSONL replay. `ws.store.pit_bars` adds clock-filtered Parquet reads; the offline training demo shows how a model can run as a node. See [`docs/harness-v0-status.md`](docs/harness-v0-status.md) for exact run commands, data limits, and the next steps. This is plumbing, not a trading backtest or profitability claim.
+This repository is scaffolding. It does not contain a validated trading edge, reliable historical constituent data, or a live broker integration.
 
-## Status
-- **M0** (repo, CI) done.
-- **M1** data-layer code is built and tested, but the milestone is **not complete**. Still required: market-session API probe (news latency, SEC timing, dedupe threshold), the full required historical backfills, and a passing strict `dq_report.py` exit gate. Cached research data and exploratory DQ reports do not satisfy M1.
-- **M2** model inference has been exercised locally, but the required JEV memorization probe has **not been implemented or run**. No JEV clean evaluation window is established. See `docs/02-design-spec.md` §3.3 and §6.
+## Start here
 
-## Run on the Spark (M1)
+1. Read [`docs/harness-v0-status.md`](docs/harness-v0-status.md) for what currently runs and what is still missing.
+2. Read [`docs/system-design.md`](docs/system-design.md) for the larger intended architecture.
+3. Look at [`src/ws/research/demo.py`](src/ws/research/demo.py) for the runnable toy pipeline.
+
+## Run the toy training pipeline
+
 ```bash
-uv sync
-cp .env.example .env        # fill in Alpaca (paper keys are fine), Finnhub, and SEC_USER_AGENT
-uv run python scripts/probe_apis.py --ws-seconds 600   # run during market hours; writes docs/data-probe-report.md
-# read the report, then record the measured values in configs/sources.yaml
-uv run python scripts/backfill.py news --start 2015-01-01
-uv run python scripts/backfill.py daily-bars --start 2016-01-01
-uv run python scripts/backfill.py intraday-bars --start 2016-01-01
-uv run python scripts/backfill.py edgar
-uv run python scripts/backfill.py finnhub
-uv run python scripts/backfill.py normalize
-uv run python scripts/dq_report.py                     # M1 exit gate; writes docs/data-quality-report.md
+uv sync --group dev --group research
+uv run python -m ws.research.demo
 ```
 
-## Development
+It generates synthetic data, filters it by availability time, creates lagged features, fits a small scikit-learn baseline, and writes a run card and event log under ignored `artifacts/research_demo/`. Synthetic results are only a mechanics demonstration.
+
+## Structure
+
+```text
+src/ws/core/       typed messages, Node contract, clock, DAG runner, replay log
+src/ws/store/      point-in-time Parquet bars
+src/ws/research/   synthetic train/evaluate example
+src/ws/portfolio/  deterministic allocation and risk rules
+src/ws/backtest/   daily-bar simulator
+src/ws/broker/     transaction-cost model
+tests/             focused checks for those components
+```
+
+Nodes can be subclassed and connected by declaring message types:
+
+```python
+class FeatureNode(Node):
+    name = "features"
+    reads = (BarsMessage,)
+    writes = FeatureMessage
+
+    async def run(self, ctx: NodeContext) -> FeatureMessage:
+        bars = ctx.inputs[BarsMessage]
+        ...
+```
+
+Compose instances with `Pipeline.builder().add(...).build()`. The builder infers edges from `reads`/`writes`, checks the graph, then the runtime executes independent nodes concurrently and records output hashes for replay.
+
+## Local development
+
 ```bash
-uv run python -m pytest -q && uv run ruff check src tests scripts && uv run mypy
+uv run python -m pytest -q
+uv run ruff check src tests scripts
+uv run mypy
 ```
