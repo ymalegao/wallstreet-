@@ -46,6 +46,29 @@ def build_fixture(root: Path) -> tuple[PITBarStore, Path, tuple[str, ...]]:
                 )
             )
 
+    spy_rng = random.Random(20211230)
+    spy_close = 100.0
+    for session in sessions:
+        session_date = session.date()
+        ts = datetime.combine(session_date, time(12), UTC)
+        spy_open = spy_close * (1.0 + spy_rng.gauss(0.0, 0.0002))
+        spy_close = max(1.0, spy_close * (1.00025 + spy_rng.gauss(0.0, 0.002)))
+        bars.append(
+            daily_bar_to_pit(
+                Bar(
+                    symbol="SPY",
+                    ts=ts,
+                    open=spy_open,
+                    high=max(spy_open, spy_close) * 1.001,
+                    low=min(spy_open, spy_close) * 0.999,
+                    close=spy_close,
+                    volume=8_000_000.0,
+                    vwap=(spy_open + spy_close) / 2.0,
+                    trade_count=10_000,
+                )
+            )
+        )
+
     store = PITBarStore(root / "bars")
     store.write(bars)
     universe_path = root / "universe.json"

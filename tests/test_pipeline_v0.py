@@ -34,7 +34,7 @@ from ws.pipeline_v0.messages import (
 )
 from ws.pipeline_v0.metrics import adv_dollars_20d, momentum_12_1, realized_vol_21d
 from ws.pipeline_v0.nodes import Execution
-from ws.pipeline_v0.run import BacktestResult, run_backtest
+from ws.pipeline_v0.run import BacktestResult, _buy_and_hold_baselines, run_backtest
 from ws.pipeline_v0.snapshot import SnapshotProvider
 from ws.schedule import daily_ticks
 from ws.store.alpaca import download_alpaca_daily_bars
@@ -141,8 +141,9 @@ def test_alpaca_downloader_paginates_and_requests_adjusted_bars(tmp_path: Path) 
         return httpx.Response(200, json=payload)
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
+    store = PITBarStore(tmp_path / "alpaca-bars")
     inserted = download_alpaca_daily_bars(
-        PITBarStore(tmp_path / "alpaca-bars"),
+        store,
         ("aapl", "msft"),
         date(2023, 1, 3),
         date(2023, 1, 4),
@@ -156,6 +157,19 @@ def test_alpaca_downloader_paginates_and_requests_adjusted_bars(tmp_path: Path) 
     assert requests[0].url.params["timeframe"] == "1Day"
     assert requests[1].url.params["page_token"] == "page-2"
     assert requests[0].headers["APCA-API-KEY-ID"] == "test-key"
+    snapshot = json.loads((store.dir / "snapshot.json").read_text(encoding="utf-8"))
+    assert snapshot["feed"] == "sip"
+    with pytest.raises(FileExistsError, match="immutable"):
+        download_alpaca_daily_bars(
+            store,
+            ("AAPL", "MSFT"),
+            date(2023, 1, 3),
+            date(2023, 1, 4),
+            api_key="test-key",
+            secret_key="test-secret",
+            client=client,
+        )
+    assert len(requests) == 2
 
 
 def test_alpaca_downloader_reads_repo_style_dotenv_names(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -415,6 +429,11 @@ def test_t9_runner_writes_daily_artifacts_and_respects_name_cap(
     assert len(equity_rows) == expected_sessions
     assert result.fill_count > 0
     assert result.events_path.exists() and result.cancelled_path.exists() and result.fills_path.exists()
+    assert result.baselines_path.exists() and result.contributions_path.exists()
+    with result.baselines_path.open(encoding="utf-8", newline="") as stream:
+        baseline_rows = list(csv.DictReader(stream))
+    assert {row["strategy"] for row in baseline_rows} == {"equal_weight_buy_hold", "spy_buy_hold"}
+    baseline_first_fill = min(row["date"] for row in baseline_rows if float(row["turnover"]) > 0)
 
     history = BarHistory.load(store, symbols, through=daily_ticks(date(2023, 12, 29), date(2023, 12, 29))[0].at)
     with result.fills_path.open(encoding="utf-8", newline="") as stream:
@@ -422,6 +441,8 @@ def test_t9_runner_writes_daily_artifacts_and_respects_name_cap(
     grouped: dict[str, list[dict[str, str]]] = {}
     for fill in fills:
         grouped.setdefault(fill["session"], []).append(fill)
+    assert min(grouped) == baseline_first_fill
+    assert len(grouped) < expected_sessions // 5
     positions: dict[str, float] = {}
     cash = 1000.0
     for session, session_fills in sorted(grouped.items()):
@@ -445,6 +466,27 @@ def test_t9_runner_writes_daily_artifacts_and_respects_name_cap(
         equity_at_open = cash + sum(shares * open_prices[symbol] for symbol, shares in positions.items() if shares > 0)
         for symbol, shares in positions.items():
             assert shares * open_prices[symbol] / equity_at_open <= 0.06
+
+
+def test_equal_weight_baseline_excludes_names_without_first_fill_data(
+    pipeline_fixture: tuple[PITBarStore, Path, tuple[str, ...]],
+) -> None:
+    store, _, symbols = pipeline_fixture
+    ticks = daily_ticks(date(2023, 3, 1), date(2023, 3, 15))
+    history = BarHistory.load(store, (*symbols, "SPY"), through=ticks[-1].at)
+    rows = _buy_and_hold_baselines(
+        history,
+        ticks,
+        (*symbols, "MISSING"),
+        initial_cash=1000.0,
+        cost_model=CostModel(),
+    )
+    first_equal = next(row for row in rows if row["strategy"] == "equal_weight_buy_hold")
+    first_spy = next(row for row in rows if row["strategy"] == "spy_buy_hold")
+    assert first_equal["constituent_count"] == len(symbols)
+    assert first_equal["excluded_symbols"] == "MISSING"
+    assert first_spy["constituent_count"] == 1
+    assert first_spy["excluded_symbols"] == ""
 
 
 def test_t10_replay_matches_all_node_output_digests(

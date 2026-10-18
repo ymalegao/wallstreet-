@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from collections.abc import Sequence
 from datetime import date, datetime
@@ -11,7 +13,8 @@ from typing import Any
 import httpx
 
 from ws.bars import Bar
-from ws.store.pit_bars import PITBarStore, daily_bar_to_pit
+from ws.store.atomic import atomic_text
+from ws.store.pit_bars import NEW_YORK, PITBarStore, daily_bar_to_pit
 
 _BARS_URL = "https://data.alpaca.markets/v2/stocks/bars"
 
@@ -35,6 +38,10 @@ def download_alpaca_daily_bars(
         raise ValueError("end must be on or after start")
     if not feed.strip():
         raise ValueError("feed cannot be empty")
+    if (store.dir / "snapshot.json").exists() or any(store.dir.glob("year=*/month=*/part-*.parquet")):
+        raise FileExistsError(
+            f"bar snapshot store is immutable and already contains data: {store.dir}; choose a new store path"
+        )
     key, secret = _resolve_credentials(api_key, secret_key)
     if not key or not secret:
         raise ValueError(
@@ -55,12 +62,18 @@ def download_alpaca_daily_bars(
     }
     inserted = 0
     seen_tokens: set[str] = set()
+    snapshot_hash = hashlib.sha256()
+    first_seen: dict[str, date] = {}
+    last_seen: dict[str, date] = {}
     owned_client = client is None
     active_client = client or httpx.Client(timeout=30.0)
     try:
         while True:
             response = active_client.get(_BARS_URL, params=params, headers=headers)
-            response.raise_for_status()
+            if response.is_error:
+                raise RuntimeError(
+                    f"Alpaca historical bars request failed with HTTP {response.status_code}: {response.text}"
+                )
             payload = response.json()
             if not isinstance(payload, dict):
                 raise ValueError("Alpaca bars response must be a JSON object")
@@ -74,6 +87,15 @@ def download_alpaca_daily_bars(
                 for symbol, raw_bars in bars_by_symbol.items()
                 for raw_bar in raw_bars
             ]
+            batch.sort(key=lambda bar: (bar.symbol, bar.event_time))
+            for bar in batch:
+                session_date = bar.event_time.astimezone(NEW_YORK).date()
+                first_seen[bar.symbol] = min(first_seen.get(bar.symbol, session_date), session_date)
+                last_seen[bar.symbol] = max(last_seen.get(bar.symbol, session_date), session_date)
+            encoded_batch = json.dumps(
+                [bar.model_dump(mode="json") for bar in batch], sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+            snapshot_hash.update(encoded_batch)
             inserted += store.write(batch)
             next_token = payload.get("next_page_token")
             if not next_token:
@@ -83,6 +105,32 @@ def download_alpaca_daily_bars(
                 raise ValueError("Alpaca repeated a pagination token")
             seen_tokens.add(token)
             params["page_token"] = token
+        snapshot_id = hashlib.sha256(
+            json.dumps(
+                {
+                    "adjustment": "all",
+                    "feed": feed,
+                    "request_end": end.isoformat(),
+                    "request_start": start.isoformat(),
+                    "rows_sha256": snapshot_hash.hexdigest(),
+                    "symbols": normalized,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        manifest = {
+            "snapshot_id": snapshot_id,
+            "feed": feed,
+            "adjustment": "all",
+            "symbols": list(normalized),
+            "requested_start": start.isoformat(),
+            "requested_end": end.isoformat(),
+            "actual_earliest_by_symbol": {symbol: value.isoformat() for symbol, value in sorted(first_seen.items())},
+            "actual_latest_by_symbol": {symbol: value.isoformat() for symbol, value in sorted(last_seen.items())},
+        }
+        manifest_path = store.dir / "snapshot.json"
+        atomic_text(manifest_path, json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     finally:
         if owned_client:
             active_client.close()

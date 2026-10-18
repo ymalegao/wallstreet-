@@ -39,7 +39,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         universe = json.loads(args.universe.read_text(encoding="utf-8"))
         inserted = download_alpaca_daily_bars(
             PITBarStore(args.store),
-            universe["symbols"],
+            (*universe["symbols"], "SPY"),
             args.start,
             args.end,
             feed=args.feed,

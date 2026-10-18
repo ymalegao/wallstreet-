@@ -29,7 +29,8 @@
     "cls": "ws.pipeline_v0.nodes.Execution",
     "kwargs": {
       "broker": "@broker",
-      "min_order_dollars": 1.0
+      "min_order_dollars": 1.0,
+      "rebalance_rule": "monthly"
     }
   }
 ]

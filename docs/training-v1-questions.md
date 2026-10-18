@@ -1,0 +1,13 @@
+# Training v1 decisions and remaining question
+
+## Resolved for this run
+
+- **Final refit iteration count:** `median-fold`. Use the median best iteration from the selected configuration's walk-forward fold/seed fits, then train each final seed on all pre-holdout rows for that fixed number of rounds. This reuses the declared walk-forward validation process and avoids inventing a second validation split.
+- **Placebo label scope:** `train-only` is the selected primary scope. Shuffle labels independently within each training date and keep validation labels and test outcomes intact. `all-splits` was also tested as the authorized fallback.
+- **T7 scoring target:** `raw_forward_return`, as specified for rank IC in Section 8. Scoring against an independently shuffled test label is diagnostic only.
+- **Development data feed:** SIP is approved for the current run. The historical request succeeded when its end date was set to the last completed session (2026-10-16); do not silently fall back to IEX. Keep the older IEX snapshot labeled as single-venue development data, not live-trading data.
+
+## Still unresolved by the spec
+
+- **T7 acceptance rule:** Both scopes fail the deterministic synthetic fixture against `raw_forward_return` (+0.1592 for train-only; +0.1669 for all-splits), while an independently shuffled test-label diagnostic is −0.0077. On the SIP 2021 fold, the primary train-only placebo is −0.0770 (t-stat −1.42); the all-splits diagnostic is −0.0638 (t-stat −1.97), both over 12 monthly observations. These single-permutation results fail the literal ±0.02 bound but do not by themselves establish leakage. The randomized training labels in the synthetic fixture have only +0.0048 mean monthly IC with the planted feature, but the trained placebo model still selects that genuinely predictive feature by chance. Do not relax the threshold or change the target silently. Owner must choose whether to (a) average many independent placebo permutations while scoring against raw returns, (b) score the T7 placebo against an independently shuffled test label while retaining raw-return IC for normal evaluation, or (c) keep the current literal rule and accept that T7 fails. On 2026-10-17, the owner explicitly requested the SIP final fit and one-time holdout score despite this unresolved gate; that run was completed and recorded as diagnostic. It does not make T7 pass or settle the acceptance rule for future runs.
+- **Exact configuration tie:** Per-fold validation rank-IC ties have no rule. Final most-wins selection specifies smaller `num_leaves`, then larger `min_data_in_leaf`, but a remaining tie can be between `lambda_l2=0` and `10`. If such a tie occurs, stop and ask instead of choosing silently.

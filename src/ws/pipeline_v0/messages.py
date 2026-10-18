@@ -20,6 +20,7 @@ class MarketSnapshot(Message):
     universe_id: str
     bars: pl.DataFrame
     last_session: date
+    benchmark_bars: pl.DataFrame = Field(default_factory=pl.DataFrame)
 
 
 class PortfolioState(Message):
@@ -61,6 +62,7 @@ class RiskAdjustedTargets(Message):
     weights: dict[str, float]
     gross_exposure: float
     constraints: tuple[str, ...]
+    risk_reductions: dict[str, float] = Field(default_factory=dict)
 
 
 class Order(BaseModel):

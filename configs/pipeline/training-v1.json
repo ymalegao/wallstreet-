@@ -1,0 +1,38 @@
+[
+  {
+    "cls": "ws.pipeline_v0.nodes.FeatureBuilder",
+    "kwargs": {
+      "feature_set": "px-v1"
+    }
+  },
+  {
+    "cls": "ws.pipeline_v0.nodes.Alpha",
+    "kwargs": {
+      "model_id": "momentum-12-1"
+    }
+  },
+  {
+    "cls": "ws.pipeline_v0.nodes.PortfolioConstruction",
+    "kwargs": {
+      "holdings": 20
+    }
+  },
+  {
+    "cls": "ws.pipeline_v0.nodes.RiskManagement",
+    "kwargs": {
+      "max_name_weight": 0.05,
+      "max_sector_weight": 1.0,
+      "target_annual_volatility": 0.15,
+      "drawdown_halt": 0.15,
+      "max_adv_fraction": 0.01
+    }
+  },
+  {
+    "cls": "ws.pipeline_v0.nodes.Execution",
+    "kwargs": {
+      "broker": "@broker",
+      "min_order_dollars": 1.0,
+      "rebalance_rule": "monthly"
+    }
+  }
+]
