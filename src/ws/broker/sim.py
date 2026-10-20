@@ -15,7 +15,7 @@ import polars as pl
 from ws.broker.base import BrokerState
 from ws.broker.costs import CostModel
 from ws.pipeline_v0.messages import Order
-from ws.pipeline_v0.metrics import adv_dollars_20d, realized_vol_21d
+from ws.pipeline_v0.metrics import cost_history_inputs
 from ws.store.history import BarHistory
 
 _XNYS = xcals.get_calendar("XNYS")
@@ -119,10 +119,9 @@ class SimBroker:
         session = _XNYS.date_to_session(session_date.isoformat(), direction="none")
         fill_open = _XNYS.session_open(session).to_pydatetime().astimezone(UTC)
         known_at_open = self.history.visible(fill_open)
-        adv_rows = adv_dollars_20d(known_at_open)
-        vol_rows = realized_vol_21d(known_at_open)
-        adv = {row["symbol"]: row["adv_dollars_20d"] for row in adv_rows.iter_rows(named=True)}
-        volatility = {row["symbol"]: row["vol_21d"] for row in vol_rows.iter_rows(named=True)}
+        cost_inputs = cost_history_inputs(known_at_open)
+        adv = {symbol: values[0] for symbol, values in cost_inputs.items()}
+        volatility = {symbol: values[1] for symbol, values in cost_inputs.items()}
 
         viable: list[_PendingOrder] = []
         for pending_order in pending:
@@ -135,6 +134,16 @@ class SimBroker:
                         "side": pending_order.order.side,
                         "notional": pending_order.order.notional,
                         "reason": "missing_session_bar",
+                    }
+                )
+            elif symbol not in cost_inputs:
+                self.cancelled.append(
+                    {
+                        "session": session_date.isoformat(),
+                        "symbol": symbol,
+                        "side": pending_order.order.side,
+                        "notional": pending_order.order.notional,
+                        "reason": "insufficient_pre_fill_cost_history",
                     }
                 )
             else:

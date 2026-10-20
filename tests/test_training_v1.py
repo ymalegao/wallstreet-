@@ -35,12 +35,12 @@ from ws.store.pit_bars import PITBarStore
 from ws.training.evaluation import _baseline_metrics
 from ws.training.final_eval import final_eval
 from ws.training.final_fit import fit_final
-from ws.training.metrics import is_month_end, rank_ic_by_date
+from ws.training.metrics import is_month_end, mean_daily_rank_ic, rank_ic_by_date
 from ws.training.placebo import permute_fold_labels
 from ws.training.registry import append_registry, count_trials, reserve_holdout
 from ws.training.splits import WalkForwardFold, build_folds
 from ws.training.table import LABEL_HORIZON, build_training_table
-from ws.training.trainer import PLACEBO_SEED, _fit_one
+from ws.training.trainer import PLACEBO_RUNS, PLACEBO_SEED, SEEDS, _empirical_percentile, _fit_one
 
 _XNYS = xcals.get_calendar("XNYS")
 
@@ -222,6 +222,22 @@ def test_trial_count_includes_registered_fits_across_snapshots(tmp_path: Path) -
         ],
     )
     assert count_trials(registry) == 4
+
+
+def test_mean_daily_rank_ic_includes_non_month_end_dates() -> None:
+    frame = pl.DataFrame(
+        {
+            "date": [date(2024, 1, 3)] * 4 + [date(2024, 1, 4)] * 4,
+            "label": [0.0, 0.33, 0.67, 1.0, 0.0, 0.33, 0.67, 1.0],
+        }
+    )
+    predictions = [0.1, 0.2, 0.3, 0.4, 0.4, 0.3, 0.2, 0.1]
+    daily_scores = rank_ic_by_date(frame, predictions, target="label", rebalance_only=False)
+
+    assert len(daily_scores) == 2
+    assert mean_daily_rank_ic(frame, predictions) == pytest.approx(
+        mean(score["rank_ic"] for score in daily_scores)
+    )
 
 
 def test_final_fit_reports_unspecified_lambda_tie(
@@ -497,7 +513,7 @@ def test_t6_planted_feature_has_positive_test_rank_ic() -> None:
     assert mean(float(item["rank_ic"]) for item in summary) > 0.1
 
 
-def test_t7_training_label_placebo_has_no_test_signal() -> None:
+def test_t8_fifty_train_only_placebos_are_null_and_real_model_is_above_them() -> None:
     signal_rng = random.Random(701)
     feature_rng = random.Random(98765)
     all_dates = [
@@ -543,27 +559,45 @@ def test_t7_training_label_placebo_has_no_test_signal() -> None:
         valid_range=(min(valid["date"].to_list()), max(valid["date"].to_list())),
         test_range=(min(test["date"].to_list()), max(test["date"].to_list())),
     )
-    placebo_fold = permute_fold_labels(fold, seed=PLACEBO_SEED, scope="train-only")
-    seed_predictions = []
-    for seed in range(5):
-        model, best_iteration = _fit_one(
-            placebo_fold,
-            {"num_leaves": 15, "min_data_in_leaf": 200, "lambda_l2": 10},
-            seed,
-            num_threads=1,
+    config = {"num_leaves": 15, "min_data_in_leaf": 200, "lambda_l2": 10}
+    real_seed_predictions = []
+    real_iterations = {}
+    for seed in SEEDS:
+        real_model, real_iteration = _fit_one(fold, config, seed, num_threads=1)
+        real_seed_predictions.append(
+            real_model.predict(test.select(PX_V1_FEATURES).to_numpy(), num_iteration=real_iteration)
         )
-        seed_predictions.append(
-            model.predict(placebo_fold.test.select(PX_V1_FEATURES).to_numpy(), num_iteration=best_iteration)
-        )
-    predictions = [
-        sum(seed_values[index] for seed_values in seed_predictions) / len(seed_predictions)
-        for index in range(test.height)
-    ]
-    placebo_ic = rank_ic_by_date(test, predictions)
-    assert placebo_ic
-    placebo_mean = mean(float(item["rank_ic"]) for item in placebo_ic)
-    monthly_ic = [(item["date"], round(float(item["rank_ic"]), 3)) for item in placebo_ic]
-    assert abs(placebo_mean) <= 0.02, f"mean={placebo_mean:.4f}; monthly IC={monthly_ic}"
+        real_iterations[seed] = real_iteration
+    real_predictions = [mean(values) for values in zip(*real_seed_predictions, strict=True)]
+    real_ic = rank_ic_by_date(test, real_predictions)
+    assert real_ic
+    real_mean = mean(float(item["rank_ic"]) for item in real_ic)
+
+    placebo_means = []
+    for index in range(PLACEBO_RUNS):
+        placebo_fold = permute_fold_labels(fold, seed=PLACEBO_SEED + index, scope="train-only")
+        seed_predictions = []
+        for seed in SEEDS:
+            placebo_model, placebo_iteration = _fit_one(
+                placebo_fold,
+                config,
+                seed,
+                num_threads=1,
+                fixed_iteration=real_iterations[seed],
+            )
+            seed_predictions.append(
+                placebo_model.predict(
+                    placebo_fold.test.select(PX_V1_FEATURES).to_numpy(), num_iteration=placebo_iteration
+                )
+            )
+        predictions = [mean(values) for values in zip(*seed_predictions, strict=True)]
+        placebo_ic = rank_ic_by_date(test, predictions)
+        assert placebo_ic
+        placebo_means.append(mean(float(item["rank_ic"]) for item in placebo_ic))
+
+    assert len(placebo_means) == 50
+    assert abs(mean(placebo_means)) <= 0.02
+    assert _empirical_percentile(real_mean, placebo_means) > 95.0
 
 
 def test_t8_same_lightgbm_seed_writes_identical_model() -> None:

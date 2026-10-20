@@ -14,7 +14,8 @@
   {
     "cls": "ws.pipeline_v0.nodes.PortfolioConstruction",
     "kwargs": {
-      "holdings": 20
+      "holdings": 25,
+      "buffer_rank": 35
     }
   },
   {

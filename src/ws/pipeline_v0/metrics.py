@@ -8,6 +8,8 @@ from statistics import mean, stdev
 
 import polars as pl
 
+MIN_COST_HISTORY_RETURNS = 21
+
 
 def _groups(bars: pl.DataFrame) -> dict[str, pl.DataFrame]:
     """Return each symbol's bars ordered by event time."""
@@ -37,8 +39,11 @@ def realized_vol_21d(bars: pl.DataFrame) -> pl.DataFrame:
     rows: list[dict[str, str | float | None]] = []
     for symbol, group in _groups(bars).items():
         closes = [float(value) for value in group.get_column("close").to_list()]
-        if len(closes) >= 22:
-            values = [log(closes[index] / closes[index - 1]) for index in range(len(closes) - 21, len(closes))]
+        if len(closes) >= MIN_COST_HISTORY_RETURNS + 1:
+            values = [
+                log(closes[index] / closes[index - 1])
+                for index in range(len(closes) - MIN_COST_HISTORY_RETURNS, len(closes))
+            ]
             volatility = stdev(values) * sqrt(252)
         else:
             volatility = None
@@ -56,6 +61,41 @@ def adv_dollars_20d(bars: pl.DataFrame) -> pl.DataFrame:
         adv = mean(notionals) if len(notionals) == 20 else None
         rows.append({"symbol": symbol, "adv_dollars_20d": adv})
     return pl.DataFrame(rows, schema={"symbol": pl.String, "adv_dollars_20d": pl.Float64})
+
+
+def cost_history_inputs(bars: pl.DataFrame) -> dict[str, tuple[float, float]]:
+    """Return valid (20-session ADV, annualized 21-return volatility) pairs.
+
+    Twenty-one close-to-close returns require 22 daily bars. A close-time decision
+    using these bars can therefore be costed at the next session's open without
+    relying on the fill-day bar.
+    """
+    if bars.is_empty():
+        return {}
+    adv = {
+        row["symbol"]: row["adv_dollars_20d"]
+        for row in adv_dollars_20d(bars).iter_rows(named=True)
+    }
+    volatility = {
+        row["symbol"]: row["vol_21d"]
+        for row in realized_vol_21d(bars).iter_rows(named=True)
+    }
+    inputs: dict[str, tuple[float, float]] = {}
+    for symbol, annual_volatility in volatility.items():
+        average_dollars = adv.get(symbol)
+        if annual_volatility is None or average_dollars is None:
+            continue
+        average_dollars = float(average_dollars)
+        annual_volatility = float(annual_volatility)
+        if (
+            not isfinite(average_dollars)
+            or average_dollars <= 0
+            or not isfinite(annual_volatility)
+            or annual_volatility < 0
+        ):
+            continue
+        inputs[symbol] = (average_dollars, annual_volatility)
+    return inputs
 
 
 def portfolio_vol_21d(bars: pl.DataFrame, weights: Mapping[str, float]) -> float:

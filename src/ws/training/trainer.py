@@ -12,15 +12,18 @@ import lightgbm as lgb
 import polars as pl
 
 from ws.features.px_v1 import PX_V1_FEATURES
+from ws.features.pxf_v1 import PXF_V1_FEATURES
 from ws.training.evaluation import run_portfolio_scenarios
-from ws.training.metrics import rank_ic_by_date, summarize_series
-from ws.training.placebo import PlaceboLabelScope, permute_fold_labels
+from ws.training.metrics import mean_daily_rank_ic, quintile_spread_by_date, rank_ic_by_date, summarize_series
+from ws.training.placebo import permute_fold_labels
 from ws.training.registry import append_registry, count_trials, registry_timestamp
 from ws.training.splits import WalkForwardFold, build_folds
-from ws.training.table import load_pre_holdout_table
+from ws.training.table import FEATURES_BY_SET, load_pre_holdout_table
+from ws.fundamentals.validation import construction_check, load_monthly_factors
 
 SEEDS = (0, 1, 2, 3, 4)
 PLACEBO_SEED = 40_001
+PLACEBO_RUNS = 50
 CONFIGS = tuple(
     {
         "num_leaves": leaves,
@@ -39,7 +42,6 @@ def run_walk_forward(
     table_path: Path,
     output_root: Path,
     *,
-    placebo_label_scope: PlaceboLabelScope,
     num_threads: int = 4,
 ) -> dict[str, Any]:
     """Run the fixed grid over expanding folds and register every config/seed/fold trial."""
@@ -49,14 +51,22 @@ def run_walk_forward(
     if not metadata_path.is_file():
         raise FileNotFoundError(f"training table metadata is missing: {metadata_path}")
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    if metadata.get("feature_set") != "px-v1" or tuple(metadata.get("feature_names", ())) != PX_V1_FEATURES:
-        raise ValueError("training table feature metadata is incompatible with px-v1")
+    feature_set = str(metadata.get("feature_set", ""))
+    feature_names = FEATURES_BY_SET.get(feature_set)
+    if feature_names is None or tuple(metadata.get("feature_names", ())) != feature_names:
+        raise ValueError("training table feature metadata is incompatible with the supported feature sets")
     frame = load_pre_holdout_table(table_path, holdout_start=date.fromisoformat(metadata["holdout_start"]))
     horizon = int(metadata["label_horizon"])
     folds = build_folds(frame, horizon=horizon)
     if not folds:
         raise ValueError("no walk-forward fold has at least three years of prior training data")
-    model_id = f"pxv1-{str(metadata['snapshot_id'])[:12]}"
+    if feature_set == "px-v1":
+        model_id = f"pxv1f2-{str(metadata['snapshot_id'])[:12]}"
+    else:
+        fundamentals_id = str(metadata.get("fundamentals_snapshot_id", ""))
+        if not fundamentals_id:
+            raise ValueError("pxf-v1 table metadata is missing its fundamentals snapshot id")
+        model_id = f"pxfv1-{str(metadata['snapshot_id'])[:10]}-{fundamentals_id[:10]}"
     run_dir = output_root / model_id
     model_dir = _ROOT / "models" / model_id
     if run_dir.exists() or model_dir.exists():
@@ -66,8 +76,12 @@ def run_walk_forward(
     commit = _git_commit()
     registry_rows: list[dict[str, Any]] = []
     fold_reports: list[dict[str, Any]] = []
+    test_frames: list[pl.DataFrame] = []
+    real_test_daily_ics: list[float] = []
+    placebo_daily_ics_by_run: dict[int, list[float]] = {index: [] for index in range(PLACEBO_RUNS)}
 
     for fold in folds:
+        test_frames.append(fold.test)
         outcomes: list[dict[str, Any]] = []
         config_validation: dict[str, list[float]] = {}
         config_entries: dict[str, list[dict[str, Any]]] = {}
@@ -80,9 +94,11 @@ def run_walk_forward(
             config_models[config_key] = []
             config_test_predictions[config_key] = []
             for seed in SEEDS:
-                model, best_iteration = _fit_one(fold, config, seed, num_threads=num_threads)
-                valid_predictions = model.predict(_features(fold.valid), num_iteration=best_iteration)
-                test_predictions = model.predict(_features(fold.test), num_iteration=best_iteration)
+                model, best_iteration = _fit_one(
+                    fold, config, seed, num_threads=num_threads, feature_names=feature_names
+                )
+                valid_predictions = model.predict(_features(fold.valid, feature_names), num_iteration=best_iteration)
+                test_predictions = model.predict(_features(fold.test, feature_names), num_iteration=best_iteration)
                 valid_ic = summarize_series(
                     item["rank_ic"] for item in rank_ic_by_date(fold.valid, valid_predictions)
                 )["mean"]
@@ -98,8 +114,9 @@ def run_walk_forward(
                     "model_id": model_id,
                     "created_at": registry_timestamp(),
                     "data_snapshot_id": metadata["snapshot_id"],
+                    "fundamentals_snapshot_id": metadata.get("fundamentals_snapshot_id"),
                     "market_data_feed": metadata["market_data_feed"],
-                    "feature_set": "px-v1",
+                    "feature_set": feature_set,
                     "label": {"horizon": horizon, "type": "xs_rank_open_to_open"},
                     "fold": fold.fold,
                     "train_range": [date.isoformat() for date in fold.train_range],
@@ -136,7 +153,7 @@ def run_walk_forward(
             model.save_model(str(selected_dir / f"seed_{seed}.txt"))
         (selected_dir / "manifest.json").write_text(
             json.dumps(
-                {"feature_set": "px-v1", "feature_names": list(PX_V1_FEATURES), "seeds": list(SEEDS)},
+                {"feature_set": feature_set, "feature_names": list(feature_names), "seeds": list(SEEDS)},
                 indent=2,
                 sort_keys=True,
             )
@@ -148,6 +165,8 @@ def run_walk_forward(
             for index in range(fold.test.height)
         ]
         model_ic = rank_ic_by_date(fold.test, selected_predictions)
+        long_short = quintile_spread_by_date(fold.test, selected_predictions)
+        real_test_daily_ics.extend(float(item["rank_ic"]) for item in model_ic)
         momentum_ic = rank_ic_by_date(fold.test, fold.test["mom_12_1"].to_list())
         ic_values = [item["rank_ic"] for item in model_ic]
         model_monthly_ic = {item["date"].strftime("%Y-%m"): float(item["rank_ic"]) for item in model_ic}
@@ -162,6 +181,84 @@ def run_walk_forward(
             output_dir=run_dir / "folds" / fold.fold / "portfolio",
             store_path=Path(metadata["source_store_path"]),
             universe_path=Path(metadata["universe_path"]),
+            feature_set=feature_set,
+            fundamentals_path=Path(metadata["fundamentals_path"]) if feature_set == "pxf-v1" else None,
+        )
+
+        placebo_run_means: list[float] = []
+        selected_config = json.loads(selected_key)
+        placebo_iterations = {
+            int(entry["seed"]): int(entry["best_iteration"]) for entry in config_entries[selected_key]
+        }
+        for permutation_index in range(PLACEBO_RUNS):
+            permutation_seed = PLACEBO_SEED + permutation_index
+            placebo_fold = permute_fold_labels(fold, seed=permutation_seed, scope="train-only")
+            seed_predictions: list[list[float]] = []
+            for seed in SEEDS:
+                model, best_iteration = _fit_one(
+                    placebo_fold,
+                    selected_config,
+                    seed,
+                    num_threads=num_threads,
+                    feature_names=feature_names,
+                    fixed_iteration=placebo_iterations[seed],
+                )
+                predictions = [
+                    float(value)
+                    for value in model.predict(
+                        _features(placebo_fold.test, feature_names), num_iteration=best_iteration
+                    )
+                ]
+                seed_predictions.append(predictions)
+                seed_ic = summarize_series(
+                    item["rank_ic"] for item in rank_ic_by_date(fold.test, predictions)
+                )["mean"]
+                registry_rows.append(
+                    {
+                        "record_type": "placebo_trial",
+                        "model_id": model_id,
+                        "created_at": registry_timestamp(),
+                        "data_snapshot_id": metadata["snapshot_id"],
+                        "fundamentals_snapshot_id": metadata.get("fundamentals_snapshot_id"),
+                        "market_data_feed": metadata["market_data_feed"],
+                        "feature_set": feature_set,
+                        "label": {"horizon": horizon, "type": "xs_rank_open_to_open"},
+                        "fold": fold.fold,
+                        "train_range": [value.isoformat() for value in fold.train_range],
+                        "valid_range": [value.isoformat() for value in fold.valid_range],
+                        "test_range": [value.isoformat() for value in fold.test_range],
+                        "params": {
+                            **_full_params(selected_config, seed, num_threads),
+                            "placebo_label_scope": "train-only",
+                            "placebo_permutation_seed": permutation_seed,
+                        },
+                        "seed": seed,
+                        "best_iteration": best_iteration,
+                        "valid_rank_ic": None,
+                        "test_rank_ic": seed_ic,
+                        "selected": False,
+                        "git_commit": commit,
+                    }
+                )
+            ensemble_predictions = [
+                sum(values[index] for values in seed_predictions) / len(SEEDS)
+                for index in range(fold.test.height)
+            ]
+            daily_ics = [
+                float(item["rank_ic"])
+                for item in rank_ic_by_date(fold.test, ensemble_predictions)
+            ]
+            run_mean = summarize_series(daily_ics)["mean"]
+            if run_mean is None:
+                raise ValueError(f"placebo run {permutation_seed} has no finite test rank IC")
+            placebo_run_means.append(float(run_mean))
+            placebo_daily_ics_by_run[permutation_index].extend(daily_ics)
+
+        fold_placebo_summary = summarize_series(placebo_run_means)
+        fold_real_mean = summarize_series(item["rank_ic"] for item in model_ic)["mean"]
+        fold_placebo_pass = (
+            fold_placebo_summary["mean"] is not None
+            and abs(float(fold_placebo_summary["mean"])) <= 0.02
         )
         for scenario in portfolio_results.values():
             scenario["monthly"] = [
@@ -180,6 +277,21 @@ def run_walk_forward(
                 "test_range": [value.isoformat() for value in fold.test_range],
                 "selected_params": json.loads(selected_key),
                 "rank_ic": summarize_series(ic_values),
+                "long_short_quintile_spread": summarize_series(item["spread"] for item in long_short),
+                "placebo": {
+                    "permutation_count": PLACEBO_RUNS,
+                    "runs": [
+                        {
+                            "permutation_seed": PLACEBO_SEED + index,
+                            "mean_test_rank_ic": value,
+                        }
+                        for index, value in enumerate(placebo_run_means)
+                    ],
+                    "mean_test_rank_ic": fold_placebo_summary["mean"],
+                    "real_model_mean_test_rank_ic": fold_real_mean,
+                    "real_model_percentile": _empirical_percentile(fold_real_mean, placebo_run_means),
+                    "pass": fold_placebo_pass,
+                },
                 "monthly_rank_ic": [
                     {
                         "date": month,
@@ -189,65 +301,44 @@ def run_walk_forward(
                     for month in sorted(set(model_monthly_ic) | set(momentum_monthly_ic))
                 ],
                 "portfolio": portfolio_results,
+                "feature_importance_gain": _mean_gain_importance(
+                    config_models[selected_key], feature_names
+                ),
             }
         )
         registry_rows.extend(outcomes)
 
-    placebo_fold = permute_fold_labels(folds[0], seed=PLACEBO_SEED, scope=placebo_label_scope)
-    placebo_predictions: list[list[float]] = []
-    placebo_rows: list[dict[str, Any]] = []
-    placebo_config = fold_reports[0]["selected_params"]
-    for seed in SEEDS:
-        model, best_iteration = _fit_one(placebo_fold, placebo_config, seed, num_threads=num_threads)
-        test_predictions = [
-            float(value) for value in model.predict(_features(placebo_fold.test), num_iteration=best_iteration)
-        ]
-        placebo_predictions.append(test_predictions)
-        per_seed_ic = summarize_series(
-            item["rank_ic"] for item in rank_ic_by_date(folds[0].test, test_predictions)
-        )["mean"]
-        placebo_rows.append(
-            {
-                "record_type": "placebo_trial",
-                "model_id": model_id,
-                "created_at": registry_timestamp(),
-                "data_snapshot_id": metadata["snapshot_id"],
-                "market_data_feed": metadata["market_data_feed"],
-                "feature_set": "px-v1",
-                "label": {"horizon": horizon, "type": "xs_rank_open_to_open"},
-                "fold": folds[0].fold,
-                "train_range": [value.isoformat() for value in folds[0].train_range],
-                "valid_range": [value.isoformat() for value in folds[0].valid_range],
-                "test_range": [value.isoformat() for value in folds[0].test_range],
-                "params": {
-                    **_full_params(placebo_config, seed, num_threads),
-                    "placebo_label_scope": placebo_label_scope,
-                    "placebo_permutation_seed": PLACEBO_SEED,
-                },
-                "seed": seed,
-                "best_iteration": best_iteration,
-                "valid_rank_ic": None,
-                "test_rank_ic": per_seed_ic,
-                "selected": False,
-                "git_commit": commit,
-            }
-        )
-    placebo_mean_predictions = [
-        sum(seed_predictions[index] for seed_predictions in placebo_predictions) / len(SEEDS)
-        for index in range(folds[0].test.height)
+    placebo_run_means = [
+        summarize_series(placebo_daily_ics_by_run[index])["mean"] for index in range(PLACEBO_RUNS)
     ]
-    placebo_summary = summarize_series(
-        item["rank_ic"] for item in rank_ic_by_date(folds[0].test, placebo_mean_predictions)
-    )
+    if any(value is None for value in placebo_run_means):
+        raise ValueError("at least one aggregate placebo run has no finite test rank IC")
+    placebo_run_means = [float(value) for value in placebo_run_means if value is not None]
+    placebo_summary = summarize_series(placebo_run_means)
+    real_model_mean = summarize_series(real_test_daily_ics)["mean"]
+    all_folds_pass = all(bool(item["placebo"]["pass"]) for item in fold_reports)
     placebo_result = {
-        "fold": folds[0].fold,
-        "label_scope": placebo_label_scope,
-        "permutation_seed": PLACEBO_SEED,
+        "label_scope": "train-only",
+        "permutation_count": PLACEBO_RUNS,
+        "permutation_seeds": [PLACEBO_SEED + index for index in range(PLACEBO_RUNS)],
+        "runs": [
+            {
+                "permutation_seed": PLACEBO_SEED + index,
+                "mean_test_rank_ic": value,
+            }
+            for index, value in enumerate(placebo_run_means)
+        ],
         "rank_ic": placebo_summary,
-        "pass": placebo_summary["mean"] is not None and abs(float(placebo_summary["mean"])) <= 0.02,
+        "real_model_mean_test_rank_ic": real_model_mean,
+        "real_model_percentile": _empirical_percentile(real_model_mean, placebo_run_means),
+        "folds_pass": all_folds_pass,
+        "pass": (
+            placebo_summary["mean"] is not None
+            and abs(float(placebo_summary["mean"])) <= 0.02
+            and all_folds_pass
+        ),
         "seed_count": len(SEEDS),
     }
-    registry_rows.extend(placebo_rows)
 
     append_registry(_REGISTRY, registry_rows)
     config_counts: dict[str, int] = {}
@@ -267,7 +358,9 @@ def run_walk_forward(
         "model_id": model_id,
         "data_snapshot_id": metadata["snapshot_id"],
         "market_data_feed": metadata["market_data_feed"],
-        "feature_set": "px-v1",
+        "feature_set": feature_set,
+        "feature_names": list(feature_names),
+        "fundamentals_snapshot_id": metadata.get("fundamentals_snapshot_id"),
         "label_horizon": horizon,
         "table_date_range": _table_date_range(frame),
         "holdout_start": metadata["holdout_start"],
@@ -283,10 +376,22 @@ def run_walk_forward(
         "placebo": placebo_result,
         "folds": fold_reports,
     }
+    if feature_set == "pxf-v1":
+        factor_path = Path(str(metadata.get("ken_french_factors_path", "")))
+        momentum_path = Path(str(metadata.get("ken_french_momentum_path", "")))
+        if not factor_path.is_file() or not momentum_path.is_file():
+            raise FileNotFoundError(
+                "pxf-v1 construction check requires the downloaded Ken French factor and momentum archives"
+            )
+        test_frame = pl.concat(test_frames, how="vertical_relaxed")
+        report["construction_check"] = construction_check(
+            test_frame,
+            load_monthly_factors(factor_path, momentum_path),
+        )
     _write_report(run_dir, report)
     if not placebo_result["pass"]:
         raise RuntimeError(
-            "label-permutation placebo failed: mean test rank IC must be within ±0.02 of zero; "
+            "label-permutation placebo failed: aggregate and per-fold means must be within ±0.02 of zero; "
             f"observed {placebo_summary['mean']}"
         )
     return report
@@ -298,22 +403,46 @@ def _fit_one(
     seed: int,
     *,
     num_threads: int,
+    feature_names: tuple[str, ...] = PX_V1_FEATURES,
+    fixed_iteration: int | None = None,
 ) -> tuple[lgb.Booster, int]:
     train = _valid_labeled(fold.train)
-    valid = _valid_labeled(fold.valid)
-    if train.is_empty() or valid.is_empty():
-        raise ValueError("LightGBM requires labeled rows in train and validation partitions")
-    train_set = lgb.Dataset(_features(train), label=train["label"].to_numpy(), feature_name=list(PX_V1_FEATURES))
-    valid_set = lgb.Dataset(
-        _features(valid), label=valid["label"].to_numpy(), feature_name=list(PX_V1_FEATURES), reference=train_set
+    if train.is_empty():
+        raise ValueError("LightGBM requires labeled rows in the training partition")
+    train_set = lgb.Dataset(
+        _features(train, feature_names), label=train["label"].to_numpy(), feature_name=list(feature_names)
     )
+    params = _full_params(config, seed, num_threads)
+    if fixed_iteration is not None:
+        if fixed_iteration < 1:
+            raise ValueError("fixed_iteration must be positive")
+        model = lgb.train(params, train_set, num_boost_round=fixed_iteration)
+        return model, fixed_iteration
+
+    valid = _valid_labeled(fold.valid)
+    if valid.is_empty():
+        raise ValueError("LightGBM requires labeled rows in the validation partition")
+    valid_set = lgb.Dataset(
+        _features(valid, feature_names),
+        label=valid["label"].to_numpy(),
+        feature_name=list(feature_names),
+        reference=train_set,
+    )
+
+    validation_dates = valid.select("date", "label")
+
+    def rank_ic_feval(predictions: Any, _dataset: lgb.Dataset) -> tuple[str, float, bool]:
+        score = mean_daily_rank_ic(validation_dates, predictions)
+        return "mean_daily_rank_ic", score if score is not None else 0.0, True
+
     model = lgb.train(
-        _full_params(config, seed, num_threads),
+        params,
         train_set,
         num_boost_round=2000,
         valid_sets=[valid_set],
         valid_names=["valid"],
-        callbacks=[lgb.early_stopping(100, verbose=False)],
+        feval=rank_ic_feval,
+        callbacks=[lgb.early_stopping(100, first_metric_only=True, verbose=False)],
     )
     return model, int(model.best_iteration or 2000)
 
@@ -321,7 +450,7 @@ def _fit_one(
 def _full_params(config: dict[str, int], seed: int, num_threads: int) -> dict[str, Any]:
     return {
         "objective": "regression",
-        "metric": "l2",
+        "metric": "None",
         "learning_rate": 0.05,
         "feature_fraction": 0.8,
         "bagging_fraction": 0.8,
@@ -341,8 +470,26 @@ def _valid_labeled(frame: pl.DataFrame) -> pl.DataFrame:
     return frame.filter(pl.col("label").is_not_null() & pl.col("raw_forward_return").is_not_null())
 
 
-def _features(frame: pl.DataFrame):
-    return frame.select(PX_V1_FEATURES).to_numpy()
+def _features(frame: pl.DataFrame, feature_names: tuple[str, ...] = PX_V1_FEATURES):
+    return frame.select(feature_names).to_numpy()
+
+
+def _mean_gain_importance(models: list[lgb.Booster], feature_names: tuple[str, ...]) -> list[dict[str, float | str]]:
+    if not models:
+        return []
+    importances = [model.feature_importance(importance_type="gain") for model in models]
+    averaged = [sum(float(values[index]) for values in importances) / len(importances) for index in range(len(feature_names))]
+    return [
+        {"feature": name, "mean_gain": value}
+        for name, value in sorted(zip(feature_names, averaged, strict=True), key=lambda item: (-item[1], item[0]))
+    ]
+
+
+def _empirical_percentile(value: float | None, distribution: list[float]) -> float | None:
+    """Return the inclusive empirical percentile of a value in a finite sample."""
+    if value is None or not distribution:
+        return None
+    return 100.0 * sum(sample <= value for sample in distribution) / len(distribution)
 
 
 def _config_key(config: dict[str, Any]) -> str:
@@ -399,6 +546,11 @@ def _write_report(output_dir: Path, report: dict[str, Any]) -> None:
             else ""
         ),
         f"- Feature set: `{report['feature_set']}`",
+        *(
+            [f"- Fundamentals snapshot: `{report['fundamentals_snapshot_id']}`"]
+            if report.get("fundamentals_snapshot_id")
+            else []
+        ),
         f"- Label horizon: {report['label_horizon']} sessions",
         f"- Pre-holdout table: {report['table_date_range'][0]} to {report['table_date_range'][1]}",
         f"- Holdout starts: {report['holdout_start']}",
@@ -413,22 +565,33 @@ def _write_report(output_dir: Path, report: dict[str, Any]) -> None:
             else f"- Final configuration unresolved: `{report['final_config_selection_error']}`"
         ),
         f"- Placebo label scope: `{report['placebo']['label_scope']}`",
-        f"- Placebo permutation seed: `{report['placebo']['permutation_seed']}`",
-        f"- Placebo mean test rank IC: `{_fmt(report['placebo']['rank_ic']['mean'])}`; "
-        f"t-stat: `{_fmt(report['placebo']['rank_ic']['t_stat'])}`; "
+        f"- Placebo permutations: `{report['placebo']['permutation_count']}` train-only permutations "
+        f"across {report['placebo']['seed_count']} model seeds per fold",
+        f"- Placebo mean of run-level test rank ICs: `{_fmt(report['placebo']['rank_ic']['mean'])}`; "
+        f"t-stat: `{_fmt(report['placebo']['rank_ic']['t_stat'])}`",
+        f"- Real model mean test rank IC: `{_fmt(report['placebo']['real_model_mean_test_rank_ic'])}`; "
+        f"percentile in placebo distribution: `{_fmt(report['placebo']['real_model_percentile'])}`; "
+        f"fold checks: **{ 'pass' if report['placebo']['folds_pass'] else 'fail' }**; "
         f"status: **{ 'pass' if report['placebo']['pass'] else 'fail' }**",
         "",
         "## Annual test folds",
         "",
-        "| Test year | Test range | Mean rank IC | IC standard deviation | t-stat | Positive IC fraction |",
-        "|---|---|---:|---:|---:|---:|",
+        "| Test year | Test range | Mean rank IC | IC standard deviation | t-stat | Positive IC fraction | "
+        "Long-short mean | Long-short t-stat | "
+        "Placebo mean | Real percentile | Placebo pass |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for fold in report["folds"]:
         summary = fold["rank_ic"]
         lines.append(
             f"| {fold['fold']} | {fold['test_range'][0]} to {fold['test_range'][1]} | "
             f"{_fmt(summary['mean'])} | {_fmt(summary['std'])} | {_fmt(summary['t_stat'])} | "
-            f"{_fmt(summary['positive_fraction'])} |"
+            f"{_fmt(summary['positive_fraction'])} | "
+            f"{_fmt(fold['long_short_quintile_spread']['mean'])} | "
+            f"{_fmt(fold['long_short_quintile_spread']['t_stat'])} | "
+            f"{_fmt(fold['placebo']['mean_test_rank_ic'])} | "
+            f"{_fmt(fold['placebo']['real_model_percentile'])} | "
+            f"{ 'pass' if fold['placebo']['pass'] else 'fail' } |"
         )
     lines.extend(
         [
@@ -449,6 +612,23 @@ def _write_report(output_dir: Path, report: dict[str, Any]) -> None:
                     f"{_fmt(metrics['annualized_return'])} | {_fmt(metrics['annualized_volatility'])} | "
                     f"{_fmt(metrics['sharpe'])} | {_fmt(metrics['max_drawdown'])} | "
                     f"{_fmt(metrics['turnover'])} | {_fmt(metrics['total_costs'])} |"
+                )
+    lines.extend(
+        [
+            "",
+            "## Turnover with and without the holding buffer",
+            "",
+            "| Fold | Costs | Strategy | With buffer | Without buffer |",
+            "|---|---:|---|---:|---:|",
+        ]
+    )
+    for fold in report["folds"]:
+        for multiple, scenario in fold["portfolio"].items():
+            for strategy in ("lightgbm", "momentum_12_1"):
+                comparison = scenario["turnover_buffer_comparison"][strategy]
+                lines.append(
+                    f"| {fold['fold']} | {multiple} | {strategy} | "
+                    f"{_fmt(comparison['with_buffer'])} | {_fmt(comparison['without_buffer'])} |"
                 )
     lines.extend(["", "## Monthly fold detail", ""])
     for fold in report["folds"]:
@@ -480,6 +660,36 @@ def _write_report(output_dir: Path, report: dict[str, Any]) -> None:
             f"- {item['month']}: {_fmt(item['contribution'])}"
             for item in fold["portfolio"]["1x"]["concentration"]["top_five_months"]
         )
+        lines.extend(
+            [
+                "",
+                "Mean LightGBM gain importance across fold seeds:",
+                "",
+                "| Feature | Mean gain |",
+                "|---|---:|",
+            ]
+        )
+        lines.extend(
+            f"| {item['feature']} | {_fmt(item['mean_gain'])} |"
+            for item in fold.get("feature_importance_gain", [])
+        )
+    if report.get("construction_check"):
+        lines.extend(
+            [
+                "",
+                "## Characteristic construction check",
+                "",
+                "Monthly portfolio returns use only walk-forward test dates; correlations are diagnostic, not acceptance gates.",
+                "",
+                "| Characteristic spread | FF factor | Months | Pearson correlation |",
+                "|---|---|---:|---:|",
+            ]
+        )
+        for name, result in report["construction_check"]["correlations"].items():
+            lines.append(
+                f"| {name} | {result['factor']} | {result['month_count']} | "
+                f"{_fmt(result['pearson_correlation'])} |"
+            )
     lines.extend(["", "This report uses only rows before the locked holdout. It contains no holdout metrics.", ""])
     (output_dir / "report.md").write_text("\n".join(lines), encoding="utf-8")
 

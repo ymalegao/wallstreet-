@@ -176,7 +176,7 @@ All outputs go to `runs/training/<model_id>/report.json` and `report.md` (the Ma
 
 ```bash
 uv run python -m ws.training.cli build-table --store data/pit-bars --out data/training/px-v1.parquet
-uv run python -m ws.training.cli walk-forward --table data/training/px-v1.parquet --out runs/training --placebo-label-scope train-only
+uv run python -m ws.training.cli walk-forward --table data/training/px-v1.parquet --out runs/training
 uv run python -m ws.training.cli fit-final --table data/training/px-v1.parquet --iteration-policy median-fold
 uv run python -m ws.training.cli final-eval --model <model_id>     # once
 ```

@@ -1,0 +1,4 @@
+{
+  "0": {"cik_str": 1, "ticker": "TST", "title": "Test Company"},
+  "1": {"cik_str": 2, "ticker": "OTHER", "title": "Unselected Company"}
+}

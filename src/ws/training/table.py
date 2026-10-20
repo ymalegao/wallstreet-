@@ -12,11 +12,13 @@ import exchange_calendars as xcals
 import polars as pl
 
 from ws.features.px_v1 import PX_V1_FEATURES, compute_px_v1
+from ws.features.pxf_v1 import PXF_V1_FEATURES, PXF_V1_LOOKBACK_SESSIONS, compute_pxf_v1
+from ws.fundamentals.store import FundamentalsStore
 from ws.store.history import BarHistory
 from ws.store.pit_bars import PITBarStore
 
 LABEL_HORIZON = 21
-FEATURE_SET_VERSION = "px-v1"
+FEATURES_BY_SET = {"px-v1": PX_V1_FEATURES, "pxf-v1": PXF_V1_FEATURES}
 _XNYS = xcals.get_calendar("XNYS")
 
 
@@ -26,6 +28,8 @@ def build_training_table(
     output_path: Path,
     *,
     horizon: int = LABEL_HORIZON,
+    feature_set: str = "px-v1",
+    facts_path: Path | None = None,
 ) -> dict[str, Any]:
     """Build only pre-holdout rows and labels from an adjusted Alpaca snapshot.
 
@@ -35,6 +39,8 @@ def build_training_table(
     """
     if horizon != LABEL_HORIZON:
         raise ValueError(f"px-v1 label horizon is fixed at {LABEL_HORIZON} sessions")
+    if feature_set not in FEATURES_BY_SET:
+        raise ValueError(f"unsupported training feature set: {feature_set}")
     metadata_output_path = output_path.with_suffix(output_path.suffix + ".json")
     if output_path.exists() or metadata_output_path.exists():
         raise FileExistsError(
@@ -73,6 +79,11 @@ def build_training_table(
     symbols = (*universe, "SPY")
     history = BarHistory.load(PITBarStore(store_path), symbols, through=through)
     visible = history.visible(through, symbols=symbols)
+    fundamentals_store: FundamentalsStore | None = None
+    if feature_set == "pxf-v1":
+        if facts_path is None:
+            raise ValueError("pxf-v1 training requires --facts pointing to an immutable SEC facts snapshot")
+        fundamentals_store = FundamentalsStore(facts_path)
     frame = _build_rows(
         visible,
         universe,
@@ -80,6 +91,8 @@ def build_training_table(
         holdout_start=holdout_start,
         first_eligible_session=eligible[0],
         horizon=horizon,
+        feature_set=feature_set,
+        fundamentals_store=fundamentals_store,
     )
     if frame.is_empty():
         raise ValueError("no training rows were generated from the visible Alpaca snapshot")
@@ -88,8 +101,8 @@ def build_training_table(
     metadata = {
         "snapshot_id": snapshot_id,
         "market_data_feed": feed,
-        "feature_set": FEATURE_SET_VERSION,
-        "feature_names": list(PX_V1_FEATURES),
+        "feature_set": feature_set,
+        "feature_names": list(FEATURES_BY_SET[feature_set]),
         "label_horizon": horizon,
         "session_start": session_start.isoformat(),
         "holdout_start": holdout_start.isoformat(),
@@ -100,6 +113,16 @@ def build_training_table(
         "source_store_path": str(store_path.resolve()),
         "universe_path": str(universe_path.resolve()),
     }
+    if fundamentals_store is not None:
+        metadata["fundamentals_snapshot_id"] = fundamentals_store.snapshot_id
+        metadata["fundamentals_path"] = str(fundamentals_store.path.resolve())
+        french_dir = fundamentals_store.raw_dir.parents[2] / "ken-french" / "raw" / fundamentals_store.raw_dir.name
+        metadata["ken_french_factors_path"] = str(
+            (french_dir / "F-F_Research_Data_5_Factors_2x3_CSV.zip").resolve()
+        )
+        metadata["ken_french_momentum_path"] = str(
+            (french_dir / "F-F_Momentum_Factor_CSV.zip").resolve()
+        )
     _write_table(frame, output_path, metadata)
     return {**metadata, "row_count": frame.height, "date_count": frame.get_column("date").n_unique()}
 
@@ -156,10 +179,16 @@ def _build_rows(
     first_eligible_session: date,
     horizon: int,
     allow_holdout: bool = False,
+    feature_set: str = "px-v1",
+    fundamentals_store: FundamentalsStore | None = None,
 ) -> pl.DataFrame:
     """Build features and labels from bars already bounded before holdout."""
     if visible_bars.is_empty():
         return pl.DataFrame()
+    if feature_set not in FEATURES_BY_SET:
+        raise ValueError(f"unsupported training feature set: {feature_set}")
+    if feature_set == "pxf-v1" and fundamentals_store is None:
+        raise ValueError("pxf-v1 feature computation requires a fundamentals snapshot")
     local_dates = visible_bars.get_column("event_time").dt.convert_time_zone("America/New_York").dt.date()
     visible_bars = visible_bars.with_columns(local_dates.alias("session_date"))
     opens: dict[tuple[str, date], float] = {}
@@ -178,11 +207,25 @@ def _build_rows(
         date_bars = visible_bars.filter(
             (pl.col("session_date") <= session_date) & (pl.col("available_at") <= tick_at)
         )
-        recent_sessions = sorted(date_bars.get_column("session_date").unique().to_list())[-300:]
+        lookback = PXF_V1_LOOKBACK_SESSIONS if feature_set == "pxf-v1" else 300
+        recent_sessions = sorted(date_bars.get_column("session_date").unique().to_list())[-lookback:]
         date_bars = date_bars.filter(pl.col("session_date").is_in(recent_sessions)).drop("session_date")
         feature_bars = date_bars.filter(pl.col("symbol").is_in(list(universe)))
         benchmark_bars = date_bars.filter(pl.col("symbol") == "SPY")
-        features = compute_px_v1(feature_bars, benchmark_bars)
+        if feature_set == "px-v1":
+            features = compute_px_v1(feature_bars, benchmark_bars)
+            feature_names = PX_V1_FEATURES
+        else:
+            assert fundamentals_store is not None
+            features = compute_pxf_v1(
+                feature_bars,
+                benchmark_bars,
+                fundamentals_store.index,
+                as_of=tick_at,
+                ticker_to_cik=fundamentals_store.ticker_to_cik,
+                industry_by_cik=fundamentals_store.industry_by_cik,
+            )
+            feature_names = PXF_V1_FEATURES
         feature_rows = {row["symbol"]: row for row in features.iter_rows(named=True)}
         valid_momentum = sum(
             feature_rows.get(symbol, {}).get("mom_12_1") is not None for symbol in universe
@@ -201,11 +244,11 @@ def _build_rows(
                 raw_returns[symbol] = exit_price / entry - 1.0
         labels = _rank_percentiles(raw_returns)
         for symbol in universe:
-            feature = feature_rows.get(symbol, {name: None for name in (*PX_V1_FEATURES, "adv_dollars_20d_raw")})
+            feature = feature_rows.get(symbol, {name: None for name in (*feature_names, "adv_dollars_20d_raw")})
             record: dict[str, object] = {
                 "date": session_date,
                 "symbol": symbol,
-                **{name: feature.get(name) for name in PX_V1_FEATURES},
+                **{name: feature.get(name) for name in feature_names},
                 "adv_dollars_20d_raw": feature.get("adv_dollars_20d_raw"),
                 "label": labels.get(symbol),
                 "raw_forward_return": raw_returns.get(symbol),
@@ -214,7 +257,19 @@ def _build_rows(
             rows.append(record)
     if not rows:
         return pl.DataFrame()
-    result = pl.DataFrame(rows).sort(["date", "symbol"])
+    # Some characteristics are null for early dates (for example, when a
+    # symbol lacks the full rolling window). Explicit dtypes prevent Polars'
+    # short-prefix inference from assigning Null to a feature column before a
+    # later row supplies its first float value.
+    schema = {
+        "date": pl.Date,
+        "symbol": pl.String,
+        **{name: pl.Float64 for name in (*FEATURES_BY_SET[feature_set], "adv_dollars_20d_raw")},
+        "label": pl.Float64,
+        "raw_forward_return": pl.Float64,
+        "label_exit_date": pl.Date,
+    }
+    result = pl.DataFrame(rows, schema=schema).sort(["date", "symbol"])
     if not allow_holdout and result.filter(pl.col("label_exit_date") >= holdout_start).height:
         raise AssertionError("training label reaches the holdout boundary")
     return result

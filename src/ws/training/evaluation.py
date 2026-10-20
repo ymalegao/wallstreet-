@@ -33,6 +33,8 @@ def run_portfolio_scenarios(
     universe_path: Path,
     fold: str | None = None,
     initial_cash: float = 1000.0,
+    feature_set: str = "px-v1",
+    fundamentals_path: Path | None = None,
 ) -> dict[str, Any]:
     """Run model and momentum portfolios at one and two times the same cost model."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -49,6 +51,9 @@ def run_portfolio_scenarios(
             store_path=store_path,
             universe_path=universe_path,
             initial_cash=initial_cash,
+            buffer_rank=35,
+            feature_set=feature_set,
+            fundamentals_path=fundamentals_path,
         )
         momentum_result = _run_one(
             start,
@@ -60,10 +65,55 @@ def run_portfolio_scenarios(
             store_path=store_path,
             universe_path=universe_path,
             initial_cash=initial_cash,
+            buffer_rank=35,
+            feature_set=feature_set,
+            fundamentals_path=fundamentals_path,
         )
+        model_no_buffer_result = _run_one(
+            start,
+            end,
+            name="lightgbm",
+            alpha_model_id=model_name,
+            output_dir=output_dir / f"lightgbm-{multiplier}x-no-buffer",
+            multiplier=multiplier,
+            store_path=store_path,
+            universe_path=universe_path,
+            initial_cash=initial_cash,
+            buffer_rank=None,
+            feature_set=feature_set,
+            fundamentals_path=fundamentals_path,
+        )
+        momentum_no_buffer_result = _run_one(
+            start,
+            end,
+            name="momentum-12-1",
+            alpha_model_id="momentum-12-1",
+            output_dir=output_dir / f"momentum-{multiplier}x-no-buffer",
+            multiplier=multiplier,
+            store_path=store_path,
+            universe_path=universe_path,
+            initial_cash=initial_cash,
+            buffer_rank=None,
+            feature_set=feature_set,
+            fundamentals_path=fundamentals_path,
+        )
+        model_metrics = _run_metrics(model_result, initial_cash)
+        momentum_metrics = _run_metrics(momentum_result, initial_cash)
+        model_no_buffer_metrics = _run_metrics(model_no_buffer_result, initial_cash)
+        momentum_no_buffer_metrics = _run_metrics(momentum_no_buffer_result, initial_cash)
         results[f"{multiplier}x"] = {
-            "lightgbm": _run_metrics(model_result, initial_cash),
-            "momentum_12_1": _run_metrics(momentum_result, initial_cash),
+            "lightgbm": model_metrics,
+            "momentum_12_1": momentum_metrics,
+            "turnover_buffer_comparison": {
+                "lightgbm": {
+                    "with_buffer": model_metrics["turnover"],
+                    "without_buffer": model_no_buffer_metrics["turnover"],
+                },
+                "momentum_12_1": {
+                    "with_buffer": momentum_metrics["turnover"],
+                    "without_buffer": momentum_no_buffer_metrics["turnover"],
+                },
+            },
             "equal_weight_buy_hold": _baseline_metrics(model_result.baselines_path, "equal_weight_buy_hold"),
             "spy_buy_hold": _baseline_metrics(model_result.baselines_path, "spy_buy_hold"),
             "monthly": _combine_monthly(model_result, momentum_result),
@@ -71,6 +121,8 @@ def run_portfolio_scenarios(
             "artifacts": {
                 "lightgbm": str(model_result.equity_path),
                 "momentum_12_1": str(momentum_result.equity_path),
+                "lightgbm_without_buffer": str(model_no_buffer_result.equity_path),
+                "momentum_without_buffer": str(momentum_no_buffer_result.equity_path),
                 "baselines": str(model_result.baselines_path),
                 "contributions": str(model_result.contributions_path),
             },
@@ -89,13 +141,24 @@ def _run_one(
     store_path: Path,
     universe_path: Path,
     initial_cash: float,
+    buffer_rank: int | None,
+    feature_set: str,
+    fundamentals_path: Path | None,
 ) -> BacktestResult:
     config = json.loads(_PIPELINE_TEMPLATE.read_text(encoding="utf-8"))
     for item in config:
+        if item["cls"] == "ws.pipeline_v0.nodes.FeatureBuilder":
+            item["kwargs"]["feature_set"] = feature_set
+            if feature_set == "pxf-v1":
+                if fundamentals_path is None:
+                    raise ValueError("pxf-v1 portfolio evaluation requires its SEC fundamentals snapshot")
+                item["kwargs"]["fundamentals_path"] = str(fundamentals_path)
         if item["cls"] == "ws.pipeline_v0.nodes.Alpha":
             item["kwargs"]["model_id"] = alpha_model_id
         if item["cls"] == "ws.pipeline_v0.nodes.Execution":
             item["kwargs"]["rebalance_rule"] = "monthly"
+        if item["cls"] == "ws.pipeline_v0.nodes.PortfolioConstruction":
+            item["kwargs"]["buffer_rank"] = buffer_rank
     output_dir.mkdir(parents=True, exist_ok=False)
     config_path = output_dir / "pipeline.json"
     config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")

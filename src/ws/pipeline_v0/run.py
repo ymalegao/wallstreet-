@@ -21,6 +21,7 @@ from ws.core.pipeline import NodeSpec, build_from_config
 from ws.pipeline_v0.messages import MarketSnapshot, PortfolioState
 from ws.pipeline_v0.metrics import adv_dollars_20d, realized_vol_21d
 from ws.pipeline_v0.snapshot import SnapshotProvider
+from ws.features.pxf_v1 import PXF_V1_LOOKBACK_SESSIONS
 from ws.schedule import daily_ticks
 from ws.store.history import BarHistory
 from ws.store.pit_bars import PITBarStore
@@ -81,10 +82,31 @@ async def run_backtest(
     universe_data = json.loads(universe_path.read_text(encoding="utf-8"))
     symbols = tuple(sorted({str(symbol).strip().upper() for symbol in universe_data["symbols"]}))
     history = BarHistory.load(store, (*symbols, *_BENCHMARK_SYMBOLS), through=ticks[-1].at)
-    provider = SnapshotProvider(history, universe_path, benchmark_symbols=_BENCHMARK_SYMBOLS)
+    specs = [NodeSpec.model_validate(item) for item in json.loads(config_path.read_text(encoding="utf-8"))]
+    feature_set = next(
+        (
+            str(spec.kwargs.get("feature_set", "mom-v0"))
+            for spec in specs
+            if spec.cls == "ws.pipeline_v0.nodes.FeatureBuilder"
+        ),
+        "mom-v0",
+    )
+    lookback_sessions = PXF_V1_LOOKBACK_SESSIONS if feature_set == "pxf-v1" else 300
+    price_manifest_path = store.dir / "snapshot.json"
+    price_snapshot_id = (
+        str(json.loads(price_manifest_path.read_text(encoding="utf-8")).get("snapshot_id", "unknown"))
+        if price_manifest_path.is_file()
+        else "unknown"
+    )
+    provider = SnapshotProvider(
+        history,
+        universe_path,
+        benchmark_symbols=_BENCHMARK_SYMBOLS,
+        lookback_sessions=lookback_sessions,
+        market_snapshot_id=price_snapshot_id,
+    )
     active_cost_model = cost_model or CostModel()
     broker = SimBroker(history, active_cost_model, initial_cash=initial_cash)
-    specs = [NodeSpec.model_validate(item) for item in json.loads(config_path.read_text(encoding="utf-8"))]
     pipeline = build_from_config(
         specs,
         resources={"broker": broker},

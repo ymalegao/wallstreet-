@@ -1,0 +1,31 @@
+{
+  "cik": 1,
+  "entityName": "Test Company",
+  "facts": {
+    "us-gaap": {
+      "Assets": {
+        "units": {
+          "USD": [
+            {"end": "2023-12-31", "val": 1000, "accn": "0000000001-24-000001", "fy": 2023, "fp": "FY", "form": "10-K", "filed": "2024-02-01"}
+          ]
+        }
+      },
+      "NetIncomeLoss": {
+        "units": {
+          "USD": [
+            {"start": "2023-01-01", "end": "2023-12-31", "val": 100, "accn": "0000000001-24-000001", "fy": 2023, "fp": "FY", "form": "10-K", "filed": "2024-02-01"}
+          ]
+        }
+      }
+    },
+    "dei": {
+      "EntityCommonStockSharesOutstanding": {
+        "units": {
+          "shares": [
+            {"end": "2024-02-01", "val": 500, "accn": "0000000001-24-000001", "fy": 2023, "fp": "FY", "form": "10-K", "filed": "2024-02-01"}
+          ]
+        }
+      }
+    }
+  }
+}

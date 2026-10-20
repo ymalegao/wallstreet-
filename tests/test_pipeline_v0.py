@@ -39,7 +39,7 @@ from ws.pipeline_v0.snapshot import SnapshotProvider
 from ws.schedule import daily_ticks
 from ws.store.alpaca import download_alpaca_daily_bars
 from ws.store.history import BarHistory
-from ws.store.pit_bars import PITBarStore, daily_bar_to_pit
+from ws.store.pit_bars import PIT_BAR_SCHEMA, PITBarStore, daily_bar_to_pit
 
 _ROOT = Path(__file__).parents[1]
 _CONFIG = _ROOT / "configs/pipeline/v0.json"
@@ -406,6 +406,104 @@ def test_t8_broker_fills_next_open_and_cancels_missing_symbol(
     )
     assert next_state.cash >= 0.0
     assert any(item["symbol"] == "MISSING" for item in broker.cancelled)
+
+
+def test_portfolio_construction_requires_21_returns_of_cost_history(tmp_path: Path) -> None:
+    from ws.pipeline_v0.nodes import PortfolioConstruction
+
+    session_ticks = daily_ticks(date(2023, 1, 3), date(2023, 2, 28))
+    sessions = [tick.at.astimezone(ZoneInfo("America/New_York")).date() for tick in session_ticks]
+    tick = session_ticks[-1]
+    rows = []
+    for symbol, symbol_sessions in (("RECENT", sessions[-21:]), ("ELIGIBLE", sessions[-22:])):
+        for index, session_date in enumerate(symbol_sessions):
+            event_time = datetime.combine(session_date, time(21), UTC)
+            close = 50.0 + index / 10
+            rows.append(
+                {
+                    "symbol": symbol,
+                    "event_time": event_time,
+                    "available_at": event_time + timedelta(minutes=15),
+                    "open": close,
+                    "high": close + 1,
+                    "low": close - 1,
+                    "close": close,
+                    "volume": 1000.0,
+                    "vwap": None,
+                    "adj_factor": None,
+                }
+            )
+    snapshot = _snapshot(tick, pl.DataFrame(rows, schema=PIT_BAR_SCHEMA), ("RECENT", "ELIGIBLE"))
+    state = PortfolioState(
+        tick=tick,
+        producer="test-coordinator",
+        cash=1000.0,
+        positions={},
+        market_values={},
+        equity=1000.0,
+        peak_equity=1000.0,
+    )
+    insights = Insights(
+        tick=tick,
+        producer="test-alpha",
+        scores={"RECENT": 1.0, "ELIGIBLE": 0.5},
+        model_id="test-model",
+    )
+    context = NodeContext(
+        clock=SimClock([tick]),
+        inputs=Inputs({Insights: insights, PortfolioState: state, MarketSnapshot: snapshot}),
+        log=EventLogger(tmp_path / "eligibility.jsonl"),
+        run_id="eligibility-test",
+    )
+
+    result = asyncio.run(PortfolioConstruction(holdings=1, buffer_rank=None).run(context))
+
+    assert result.ranked_symbols == ("ELIGIBLE",)
+    assert dict(result.weights) == {"ELIGIBLE": 1.0}
+
+
+def test_broker_cancels_and_logs_order_without_prefill_cost_history() -> None:
+    session_ticks = daily_ticks(date(2023, 1, 3), date(2023, 2, 28))
+    sessions = [tick.at.astimezone(ZoneInfo("America/New_York")).date() for tick in session_ticks]
+    decision_tick = session_ticks[-2]
+    fill_tick = session_ticks[-1]
+    rows = []
+    for index, session_date in enumerate(sessions[-22:]):
+        event_time = datetime.combine(session_date, time(21), UTC)
+        close = 50.0 + index / 10
+        rows.append(
+            {
+                "symbol": "NEW",
+                "event_time": event_time,
+                "available_at": event_time + timedelta(minutes=15),
+                "open": close,
+                "high": close + 1,
+                "low": close - 1,
+                "close": close,
+                "volume": 1000.0,
+                "vwap": None,
+                "adj_factor": None,
+            }
+        )
+    broker = SimBroker(BarHistory(pl.DataFrame(rows, schema=PIT_BAR_SCHEMA)), CostModel())
+    broker.submit(
+        [Order(symbol="NEW", side="buy", notional=100.0, reference_price=52.0)],
+        placed_at=decision_tick.at,
+    )
+
+    state = broker.state(as_of=fill_tick.at)
+
+    assert state.cash == 1000.0
+    assert broker.fills == []
+    assert broker.cancelled == [
+        {
+            "session": fill_tick.at.astimezone(ZoneInfo("America/New_York")).date().isoformat(),
+            "symbol": "NEW",
+            "side": "buy",
+            "notional": 100.0,
+            "reason": "insufficient_pre_fill_cost_history",
+        }
+    ]
 
 
 def test_t9_runner_writes_daily_artifacts_and_respects_name_cap(

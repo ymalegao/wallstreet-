@@ -20,6 +20,13 @@ class RankIC(TypedDict):
     rank_ic: float
 
 
+class QuintileSpread(TypedDict):
+    date: date
+    spread: float
+    top_quintile_mean_return: float
+    bottom_quintile_mean_return: float
+
+
 def rank_ic_by_date(
     frame: pl.DataFrame,
     predictions: Iterable[float | None],
@@ -55,6 +62,84 @@ def rank_ic_by_date(
         ic = _correlation(prediction_ranks, actual_ranks)
         if ic is not None:
             output.append({"date": session_date, "rank_ic": ic})
+    return output
+
+
+def mean_daily_rank_ic(frame: pl.DataFrame, predictions: Iterable[float], *, target: str = "label") -> float | None:
+    """Return mean per-date Spearman IC for every date, not only rebalance dates."""
+    values = list(predictions)
+    if len(values) != frame.height:
+        raise ValueError("prediction count must match frame rows")
+    if "date" not in frame.columns or target not in frame.columns:
+        raise ValueError(f"rank-IC frame must contain date and {target!r} columns")
+    if frame.is_empty():
+        return None
+
+    ranked = (
+        frame.select("date", target)
+        .with_columns(pl.Series("__prediction", values, dtype=pl.Float64))
+        .filter(
+            pl.col(target).is_not_null()
+            & pl.col(target).is_finite()
+            & pl.col("__prediction").is_finite()
+        )
+        .with_columns(
+            pl.col(target).rank(method="average").over("date").alias("__target_rank"),
+            pl.col("__prediction").rank(method="average").over("date").alias("__prediction_rank"),
+        )
+    )
+    by_date = ranked.group_by("date").agg(
+        pl.corr("__prediction_rank", "__target_rank").alias("rank_ic")
+    )
+    result = by_date.select(pl.col("rank_ic").mean()).item()
+    if result is None or not isfinite(float(result)):
+        return None
+    return float(result)
+
+
+def quintile_spread_by_date(
+    frame: pl.DataFrame,
+    predictions: Iterable[float | None],
+    *,
+    target: str = "raw_forward_return",
+    rebalance_only: bool = True,
+) -> list[QuintileSpread]:
+    """Measure equal-weight top-minus-bottom prediction quintile returns by date."""
+    values = list(predictions)
+    if len(values) != frame.height:
+        raise ValueError("prediction count must match frame rows")
+    grouped: dict[date, list[tuple[float, float, str]]] = defaultdict(list)
+    for row, prediction in zip(frame.iter_rows(named=True), values, strict=True):
+        actual = row.get(target)
+        session_date = row.get("date")
+        if (
+            not isinstance(session_date, date)
+            or actual is None
+            or prediction is None
+            or not isfinite(float(actual))
+            or not isfinite(float(prediction))
+        ):
+            continue
+        if rebalance_only and not is_month_end(session_date):
+            continue
+        grouped[session_date].append((float(prediction), float(actual), str(row.get("symbol", ""))))
+
+    output: list[QuintileSpread] = []
+    for session_date, pairs in sorted(grouped.items()):
+        if len(pairs) < 5:
+            continue
+        ordered = sorted(pairs, key=lambda item: (item[0], item[2]))
+        quintile_size = max(1, len(ordered) // 5)
+        bottom_mean = mean(item[1] for item in ordered[:quintile_size])
+        top_mean = mean(item[1] for item in ordered[-quintile_size:])
+        output.append(
+            {
+                "date": session_date,
+                "spread": top_mean - bottom_mean,
+                "top_quintile_mean_return": top_mean,
+                "bottom_quintile_mean_return": bottom_mean,
+            }
+        )
     return output
 
 

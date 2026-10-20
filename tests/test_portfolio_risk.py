@@ -6,10 +6,23 @@ from ws.broker.costs import CostModel
 from ws.portfolio import PortfolioConstructor, RiskManager
 
 
-def test_constructor_is_deterministic_and_ignores_nonpositive_scores() -> None:
+def test_constructor_is_deterministic_on_score_ties() -> None:
     targets = PortfolioConstructor(holdings=2).construct({"b": 0.5, "A": 0.5, "c": 0.0})
     assert targets.ranked_symbols == ("A", "B")
     assert targets.weights == {"A": 0.5, "B": 0.5}
+
+
+def test_constructor_keeps_held_names_inside_buffer_and_fills_to_target() -> None:
+    scores = {f"S{index:02d}": 100 - index for index in range(1, 41)}
+    targets = PortfolioConstructor(holdings=25, buffer_rank=35).construct(
+        scores,
+        held_symbols={"S30", "S40"},
+    )
+
+    assert "S30" in targets.ranked_symbols
+    assert "S40" not in targets.ranked_symbols
+    assert len(targets.ranked_symbols) == 25
+    assert len(targets.weights) == 25
 
 
 def test_risk_manager_applies_name_sector_volatility_and_drawdown_limits() -> None:

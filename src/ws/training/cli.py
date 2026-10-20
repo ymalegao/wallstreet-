@@ -20,16 +20,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m ws.training.cli")
     commands = parser.add_subparsers(dest="command", required=True)
 
-    build = commands.add_parser("build-table", help="build a pre-holdout px-v1 training table")
+    build = commands.add_parser("build-table", help="build a pre-holdout px-v1 or pxf-v1 table")
     build.add_argument("--store", type=Path, required=True)
     build.add_argument("--universe", type=Path, default=_UNIVERSE)
+    build.add_argument("--feature-set", choices=("px-v1", "pxf-v1"), default="px-v1")
+    build.add_argument("--facts", type=Path)
     build.add_argument("--out", type=Path, required=True)
 
-    walk = commands.add_parser("walk-forward", help="train and evaluate the fixed LightGBM grid")
+    walk = commands.add_parser(
+        "walk-forward", help="train the fixed LightGBM grid and run 50 train-only placebo permutations"
+    )
     walk.add_argument("--table", type=Path, required=True)
     walk.add_argument("--out", type=Path, default=_ROOT / "runs" / "training")
     walk.add_argument("--num-threads", type=int, default=4)
-    walk.add_argument("--placebo-label-scope", choices=("train-only", "all-splits"), default="train-only")
 
     fit = commands.add_parser("fit-final", help="fit the pinned five-seed pre-holdout model")
     fit.add_argument("--table", type=Path, required=True)
@@ -41,7 +44,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     if args.command == "build-table":
-        result = build_training_table(args.store, args.universe, args.out)
+        result = build_training_table(
+            args.store,
+            args.universe,
+            args.out,
+            feature_set=args.feature_set,
+            facts_path=args.facts,
+        )
         manifest = json.loads((args.store / "snapshot.json").read_text(encoding="utf-8"))
         write_data_coverage(manifest, _ROOT / "docs" / "data-coverage.md")
         print(json.dumps(result, indent=2, sort_keys=True))
@@ -50,7 +59,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = run_walk_forward(
             args.table,
             args.out,
-            placebo_label_scope=args.placebo_label_scope,
             num_threads=args.num_threads,
         )
         print(json.dumps({key: value for key, value in result.items() if key != "folds"}, indent=2, sort_keys=True))

@@ -20,6 +20,7 @@ class MarketSnapshot(Message):
     universe_id: str
     bars: pl.DataFrame
     last_session: date
+    market_snapshot_id: str = "unknown"
     benchmark_bars: pl.DataFrame = Field(default_factory=pl.DataFrame)
 
 

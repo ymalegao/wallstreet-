@@ -23,6 +23,7 @@ class SnapshotProvider:
         universe_path: Path,
         lookback_sessions: int = 300,
         benchmark_symbols: tuple[str, ...] = ("SPY",),
+        market_snapshot_id: str | None = None,
     ) -> None:
         if lookback_sessions < 1:
             raise ValueError("lookback_sessions must be positive")
@@ -35,6 +36,7 @@ class SnapshotProvider:
         self.benchmark_symbols = tuple(sorted({symbol.strip().upper() for symbol in benchmark_symbols}))
         self.universe_id = f"sp100-proxy@{date.fromisoformat(universe_data['as_of']).isoformat()}"
         self.lookback_sessions = lookback_sessions
+        self.market_snapshot_id = market_snapshot_id or "unknown"
 
     def snapshot(self, tick: Tick) -> MarketSnapshot:
         """Return the symbols and bars visible to the coordinator at this tick."""
@@ -58,6 +60,7 @@ class SnapshotProvider:
             producer="snapshot_provider",
             universe=self.symbols,
             universe_id=self.universe_id,
+            market_snapshot_id=self.market_snapshot_id,
             bars=bars,
             last_session=last_session,
             benchmark_bars=benchmark_bars,

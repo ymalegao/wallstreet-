@@ -14,6 +14,8 @@ import polars as pl
 from ws.broker.base import Broker
 from ws.core.node import Node, NodeContext
 from ws.features.px_v1 import PX_V1_FEATURES, compute_px_v1
+from ws.features.pxf_v1 import PXF_V1_FEATURES, compute_pxf_v1
+from ws.fundamentals.store import FundamentalsStore
 from ws.pipeline_v0.messages import (
     Features,
     Insights,
@@ -24,12 +26,20 @@ from ws.pipeline_v0.messages import (
     PortfolioTargets,
     RiskAdjustedTargets,
 )
-from ws.pipeline_v0.metrics import adv_dollars_20d, momentum_12_1, portfolio_vol_21d, realized_vol_21d
+from ws.pipeline_v0.metrics import (
+    adv_dollars_20d,
+    cost_history_inputs,
+    momentum_12_1,
+    portfolio_vol_21d,
+    realized_vol_21d,
+)
 from ws.portfolio.constructor import PortfolioConstructor as ScorePortfolioConstructor
 from ws.portfolio.risk import RiskConfig, RiskManager
 
 _MODEL_ROOT = Path(__file__).parents[3] / "models"
 _XNYS = xcals.get_calendar("XNYS")
+_PXF_FEATURE_CACHE: dict[tuple[str, ...], pl.DataFrame] = {}
+_PXF_FEATURE_CACHE_MAX = 3_000
 
 
 class FeatureBuilder(Node):
@@ -39,11 +49,16 @@ class FeatureBuilder(Node):
     reads = (MarketSnapshot,)
     writes = Features
 
-    def __init__(self, feature_set: str = "mom-v0") -> None:
+    def __init__(self, feature_set: str = "mom-v0", fundamentals_path: str | Path | None = None) -> None:
         super().__init__()
-        if feature_set not in {"mom-v0", "px-v1"}:
-            raise ValueError("feature_set must be 'mom-v0' or 'px-v1'")
+        if feature_set not in {"mom-v0", "px-v1", "pxf-v1"}:
+            raise ValueError("feature_set must be 'mom-v0', 'px-v1' or 'pxf-v1'")
         self.feature_set = feature_set
+        self.fundamentals_store: FundamentalsStore | None = None
+        if feature_set == "pxf-v1":
+            if fundamentals_path is None:
+                raise ValueError("pxf-v1 requires fundamentals_path to an immutable SEC facts snapshot")
+            self.fundamentals_store = FundamentalsStore(Path(fundamentals_path))
 
     async def run(self, ctx: NodeContext) -> Features:
         """Calculate cross-sectional features from bars visible in the snapshot."""
@@ -52,6 +67,39 @@ class FeatureBuilder(Node):
         if self.feature_set == "px-v1":
             frame = compute_px_v1(bars, snapshot.benchmark_bars)
             frame = pl.DataFrame({"symbol": list(snapshot.universe)}).join(frame, on="symbol", how="left")
+            return Features(
+                tick=ctx.tick,
+                producer=self.name,
+                frame=frame.sort("symbol"),
+                feature_set=self.feature_set,
+            )
+        if self.feature_set == "pxf-v1":
+            assert self.fundamentals_store is not None
+            cache_key = (
+                snapshot.market_snapshot_id,
+                self.fundamentals_store.snapshot_id,
+                snapshot.universe_id,
+                ctx.tick.id,
+                *snapshot.universe,
+            )
+            cache_enabled = snapshot.market_snapshot_id != "unknown"
+            frame = _PXF_FEATURE_CACHE.get(cache_key) if cache_enabled else None
+            if frame is None:
+                frame = compute_pxf_v1(
+                    bars,
+                    snapshot.benchmark_bars,
+                    self.fundamentals_store.index,
+                    as_of=ctx.tick.at,
+                    ticker_to_cik=self.fundamentals_store.ticker_to_cik,
+                    industry_by_cik=self.fundamentals_store.industry_by_cik,
+                )
+                frame = pl.DataFrame({"symbol": list(snapshot.universe)}).join(
+                    frame, on="symbol", how="left"
+                ).sort("symbol")
+                if cache_enabled:
+                    if len(_PXF_FEATURE_CACHE) >= _PXF_FEATURE_CACHE_MAX:
+                        _PXF_FEATURE_CACHE.pop(next(iter(_PXF_FEATURE_CACHE)))
+                    _PXF_FEATURE_CACHE[cache_key] = frame
             return Features(
                 tick=ctx.tick,
                 producer=self.name,
@@ -77,6 +125,7 @@ class Alpha(Node):
         self.model_id = model_id
         self._models: list[lgb.Booster] = []
         self._feature_names: tuple[str, ...] = ()
+        self._model_feature_set = "px-v1"
         if model_id != "momentum-12-1":
             if not model_id.startswith("lgbm@"):
                 raise ValueError("model_id must be 'momentum-12-1' or 'lgbm@<model_id>'")
@@ -93,11 +142,14 @@ class Alpha(Node):
                 model_dir = model_dir / "folds" / fold_name
             manifest_path = model_dir / "manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            if manifest.get("feature_set") != "px-v1":
-                raise ValueError(f"model {model_name} does not use px-v1 features")
+            feature_set = manifest.get("feature_set")
+            if feature_set not in {"px-v1", "pxf-v1"}:
+                raise ValueError(f"model {model_name} uses an unsupported feature set")
             names = tuple(manifest.get("feature_names", ()))
-            if names != PX_V1_FEATURES:
+            expected_names = PX_V1_FEATURES if feature_set == "px-v1" else PXF_V1_FEATURES
+            if names != expected_names:
                 raise ValueError(f"model {model_name} has an incompatible feature list")
+            self._model_feature_set = str(feature_set)
             self._feature_names = names
             for seed in manifest.get("seeds", ()):
                 model_path = model_dir / f"seed_{int(seed)}.txt"
@@ -111,8 +163,11 @@ class Alpha(Node):
         frame = features.frame
         scores: dict[str, float] = {}
         if self.model_id != "momentum-12-1":
-            if features.feature_set != "px-v1":
-                raise ValueError("LightGBM inference requires feature_set='px-v1'")
+            if features.feature_set != self._model_feature_set:
+                raise ValueError(
+                    f"model feature set {self._model_feature_set!r} does not match "
+                    f"FeatureBuilder output {features.feature_set!r}"
+                )
             matrix = frame.select(self._feature_names).to_numpy()
             predictions = [model.predict(matrix) for model in self._models]
             for index, row in enumerate(frame.iter_rows(named=True)):
@@ -128,20 +183,30 @@ class Alpha(Node):
 
 
 class PortfolioConstruction(Node):
-    """Convert positive momentum scores into equal-weight long-only targets."""
+    """Convert ranked scores and current holdings into equal-weight targets."""
 
     name = "portfolio_construction"
-    reads = (Insights,)
+    reads = (Insights, PortfolioState, MarketSnapshot)
     writes = PortfolioTargets
     kind = "stateful"
 
-    def __init__(self, holdings: int = 25) -> None:
+    def __init__(self, holdings: int = 25, buffer_rank: int | None = 35) -> None:
         super().__init__()
-        self.constructor = ScorePortfolioConstructor(holdings=holdings)
+        self.constructor = ScorePortfolioConstructor(holdings=holdings, buffer_rank=buffer_rank)
 
     async def run(self, ctx: NodeContext) -> PortfolioTargets:
-        """Build equal-weight targets from the top positive scores."""
-        result = self.constructor.construct(ctx.inputs[Insights].scores)
+        """Filter short-history names, then retain buffered holdings and fill by rank."""
+        snapshot = ctx.inputs[MarketSnapshot]
+        held_symbols = {
+            symbol for symbol, shares in ctx.inputs[PortfolioState].positions.items() if shares != 0
+        }
+        cost_eligible = cost_history_inputs(snapshot.bars).keys()
+        eligible_scores = {
+            symbol: score
+            for symbol, score in ctx.inputs[Insights].scores.items()
+            if symbol in cost_eligible
+        }
+        result = self.constructor.construct(eligible_scores, held_symbols=held_symbols)
         return PortfolioTargets(
             tick=ctx.tick,
             producer=self.name,
