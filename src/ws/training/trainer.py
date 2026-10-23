@@ -61,7 +61,8 @@ def run_walk_forward(
     if not folds:
         raise ValueError("no walk-forward fold has at least three years of prior training data")
     if feature_set == "px-v1":
-        model_id = f"pxv1f2-{str(metadata['snapshot_id'])[:12]}"
+        # f3: rerun under the fixed-iteration placebo protocol; pxv1f2-* predates it.
+        model_id = f"pxv1f3-{str(metadata['snapshot_id'])[:12]}"
     else:
         fundamentals_id = str(metadata.get("fundamentals_snapshot_id", ""))
         if not fundamentals_id:
