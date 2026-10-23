@@ -29,7 +29,8 @@ Yash accepted D1–D7 and all five implementation defaults on 2026-10-18. There 
 - Coverage report: `docs/fund-v1-coverage.md`.
 - `px-v1` F2 walk-forward completed: `runs/training/pxv1f2-60a47f8a0fcb/report.md`.
 - `pxf-v1` walk-forward stopped during the 2024 fold's portfolio simulation under model id `pxfv1-60a47f8a0f-8ef316af7b`. The trace ends with `ValueError: insufficient pre-fill cost history for GEV`. Fold checkpoints for 2021–2024 were saved, but there is no final report; the run log is `runs/training/pxfv1-60a47f8a0f-8ef316af7b.attempt.log`.
-- Before rerunning, portfolio construction now requires 21 close-to-close returns (22 visible closes) and valid 20-session ADV. The broker rechecks pre-fill inputs and records a cancellation rather than failing or assuming zero costs. A fresh PXF walk-forward is pending.
+- Portfolio construction now requires 21 close-to-close returns (22 visible closes) and valid 20-session ADV. The broker rechecks pre-fill inputs and records a cancellation rather than failing or assuming zero costs.
+- Fresh PXF walk-forward completed on 2026-10-19 under model id `pxfv1-60a47f8a0f-8ef316af7b`: `runs/training/pxfv1-60a47f8a0f-8ef316af7b/report.md`. Console output is saved to `runs/training/pxfv1-60a47f8a0f-8ef316af7b.rerun-20261019.log`.
 - An earlier PXF attempt left only the 2021 fold checkpoint and no report or registry entries. Its artifacts are preserved under `.incomplete-20261018`; the reason it ended was not present in the retained output.
 - No holdout evaluation has been run.
 
@@ -40,7 +41,13 @@ Yash accepted D1–D7 and all five implementation defaults on 2026-10-18. There 
 - A shared `pxf-v1` feature function is wired into both the training table builder and `FeatureBuilder`.
 - The `pxf-v1` table is built from the immutable SIP and SEC snapshots: 218,665 rows across 2,165 dates, ending 2025-08-13 with all labels before the 2025-09-16 holdout.
 - `px-v1` F2 walk-forward covers five annual folds (2021 through partial 2025). Mean daily test rank IC is 0.0231 overall, but varies substantially by year; treat this as preliminary predictive evidence, not a demonstrated net trading edge. The report contains fold-level metrics and portfolio baselines.
-- PXF training and 2021–2023 evaluation completed; the 2024 portfolio run stops because GEV lacks 21-session pre-fill cost history. No aggregate PXF result is available until this execution edge case is handled and the walk-forward completes.
+- `pxf-v1` walk-forward (rerun after the pre-fill eligibility fix) completed all five folds. Mean daily test rank IC is 0.0008; the real model sits at the 46th percentile of the 50 train-only placebo runs, i.e. indistinguishable from noise.
+- The `px-v1` F2 report (2026-10-18) predates the placebo fix below and the pre-fill eligibility change, so its 96th-percentile placebo result is not directly comparable to `pxf-v1`. A rerun under the current code is pending.
 - Train-only placebo fits now use the selected real model's per-seed iteration counts, so unpermuted validation labels do not choose each null model's complexity.
 - Full test suite: 62 passed after addressing parser/tag/staleness/return-formula expectations, the placebo validation-selection issue, and the new eligibility/backstop behavior.
 - No `final-eval` was run.
+
+## Open questions
+
+- **Q1 (placebo "pass" label):** The per-fold and overall "Placebo pass" / "status: pass" fields check only that the placebo mean IC is within ±0.02 of zero (a leakage sanity check). They do not test whether the real model beats the placebos; for example, `pxf-v1` 2022 shows "pass" at the 6th percentile. Should the label be renamed, or a separate real-vs-placebo verdict added? Unresolved.
+- **Q2 (px-v1 rerun model id):** Model ids are derived from the data snapshot, so a `px-v1` rerun reuses `pxv1f2-60a47f8a0fcb`; the trainer refuses to overwrite and the append-only registry would hold two runs under one id. How should the rerun be identified? Unresolved.
