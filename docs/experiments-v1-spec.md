@@ -1,18 +1,32 @@
 # Experiments v1 — Spec (draft)
 
-Status: **draft, not authorized.** Written 2026-10-22 for Yash to review. Every item marked **Proposed** is a suggestion, not a decision. Open questions are in `docs/experiments-v1-questions.md`; only Yash resolves them.
+Status: **authorized for implementation, 2026-10-23.** Yash's instruction to the implementer: implement this spec, do not stop for open questions, take the best guess. Every item marked **Proposed** is the default to implement. Open questions are in `docs/experiments-v1-questions.md`.
 Owner: Yash. Implementer: coding agent.
+
+## Decisions made by Yash so far
+
+| Date | Decision |
+|---|---|
+| 2026-10-22 | Run three experiments in order: E1 fair `px-v1` rerun, E2 weekly, E3 news + monthly. News comes after E2. |
+| 2026-10-22 | Reruns get a new model id instead of overwriting (`pxv1f3-…`); E1 is running under it. |
+| 2026-10-22 | Long-term direction: the LLM plugs in as a pipeline node (and later as a tool an agent uses). The harness must be solid before an LLM touches it. |
+| 2026-10-22 | E3 uses a language model already on the Spark, not a downloaded point-in-time model (Q-E3.2). |
+| 2026-10-23 | E3 scorer is Gemma-4-26B-A4B (local NVFP4 build), served by vLLM (Q-E3.10). Feasibility check in 5.5. |
+| 2026-10-23 | Implementer proceeds on every **Proposed** default without stopping. |
+
+Items marked **Proposed** are still open questions for Yash, but they are the defaults to build. When you implement one, add "Assumed by implementer, <date>" to that question in `docs/experiments-v1-questions.md`. Do not write "resolved"; Yash may change it later. This spec may be updated while you work, so re-read it before starting each experiment.
 
 ## 0. Rules for the implementer
 
-1. **Implement only what this spec says**, one experiment at a time, in order (E1 → E2 → E3). Do not start an experiment until Yash has resolved its questions.
-2. **If something is ambiguous, missing, or a download fails, stop and ask** in `docs/experiments-v1-questions.md`. Never mark a question resolved yourself.
+1. **Implement only what this spec says**, one experiment at a time, in order (E1 → E2 → E3). Use the **Proposed** default for any open question.
+2. **If something is ambiguous, missing, or a download fails, write it in `docs/experiments-v1-questions.md`, take the most conservative best guess, and continue.** Never mark a question resolved yourself. Never substitute a different data source or model without writing it down.
 3. **No `final-eval`.** The 2025-09-16 → 2026-09-16 holdout has been viewed. Walk-forward only. No training label may end on or after 2025-09-16.
 4. **Every feature formula exists once**, shared by the table builder and `FeatureBuilder` (as in training v1 and fund-v1).
 5. **Downloaded data and model weights are never committed.** Raw downloads are immutable, with sha256 manifests.
 6. **No network access in tests.** Use small fixtures under `tests/fixtures/`.
 7. **Every run gets its own model id** and never overwrites an earlier run. Every fit, including placebo fits, counts as a trial in `models/registry.jsonl`.
 8. **Keep the survivorship label** (today's S&P 100 proxy applied to the past) in every report.
+9. **Commit in small steps** with the existing test suite passing (`uv run pytest -q`). Do not commit data, model weights or `.env`.
 
 ## 1. Goal
 
@@ -37,11 +51,11 @@ So that "better" means the same thing everywhere, decide these **before** seeing
   3. the long-only portfolio beats equal-weight buy-and-hold in total return across folds **at 2× costs**.
   Anything weaker is reported as "inconclusive", not as a win.
 - Every comparison is reported side by side in one table: rank IC (mean, t-stat), placebo percentile, long-short quintile spread, long-only vs equal-weight and SPY at 1× and 2×, turnover, costs paid.
-- **Reporting fix (Q1 in `fund-v1-questions.md`):** the current "Placebo pass" field only checks that placebos average near zero. Reports for these experiments should label that field as a **leakage check**, and separately state whether the real model cleared the 95th percentile. Exact wording waits on Yash's answer to Q1.
+- **Reporting fix (Q1 in `fund-v1-questions.md`):** the current "Placebo pass" field only checks that placebos average near zero. Reports for these experiments should label that field as a **leakage check**, and separately state whether the real model cleared the 95th percentile. Proposed: rename the field to `leakage_check` ("Leakage check: pass/fail") and add `beats_placebo_95` ("Beats 95% of placebos: yes/no") overall and per fold. Apply it to all three experiments' reports.
 
 ## 3. E1 — Fair `px-v1` rerun
 
-**Status:** already running (authorized 2026-10-22) as model id `pxv1f3-60a47f8a0fcb`, on the current code. Log: `runs/training/pxv1f3-60a47f8a0fcb.log`.
+**Status:** already running (authorized 2026-10-22) as model id `pxv1f3-60a47f8a0fcb`, on commit `0646703`. Log: `runs/training/pxv1f3-60a47f8a0fcb.log`. **Do not restart or kill it.** Check for `runs/training/pxv1f3-60a47f8a0fcb/report.md`; it exists once the run finishes. Write the deliverable then. E2 and E3 work can proceed in parallel; the run uses about 4 CPU threads and no GPU.
 
 **What changed since `pxv1f2-60a47f8a0fcb`:**
 - Placebo fits now use the real model's per-seed tree counts, instead of early-stopping themselves on the unshuffled validation labels.
@@ -124,7 +138,7 @@ Alpaca News API ──► raw news (immutable JSONL) ──► point-in-time new
 
 ### 5.2 Step E3.0 — Download and coverage audit (gate)
 
-Nothing is scored until Yash has read the coverage report.
+Write the coverage report before scoring. Yash will read it later; per the 2026-10-23 instruction, continue without waiting.
 
 - **Source:** Alpaca News API, `GET https://data.alpaca.markets/v1beta1/news`. Benzinga is the only provider. History is advertised back to 2015.
   - Parameters: `symbols`, `start`, `end`, `limit` (max 50), `sort`, `include_content`, `page_token`.
@@ -152,22 +166,53 @@ A language model trained on text through year Y "knows" what happened to compani
 | **B. Modern model + company names hidden** | Use a strong current open model; replace company names and tickers with "the company". Reduces, does not remove, the model's memory of what happened. | Partly | Glasserman & Lin (2023), "Assessing Look-Ahead Bias in Stock Return Predictions Generated by GPT Sentiment Analysis" |
 | **C. Modern model, post-cutoff dates only** | Only use news after the model's training cutoff. | Yes, but the history is too short for 5 walk-forward folds | Lopez-Lira & Tang (2023) |
 
-- **Yash, 2026-10-22:** for now, use a model already on the Spark (JEV-9B, Qwen3 or Gemma), i.e. options B/C rather than A. E3 backtest results are therefore labelled "possibly look-ahead-biased"; the clean test is post-cutoff dates and paper trading. Whether to anonymize, and whether to run A later as a check, remain open (Q-E3.2, Q-E3.11).
-- **Caveat on A:** Lopez-Lira & Tang (Section 7.1) found that small models (GPT-1, GPT-2, BERT) scored headlines much less accurately, their scores were not significantly correlated with later drift, and the resulting strategies had negative Sharpe ratios. He et al. report ChronoGPT competitive with Llama 3.1 in their asset-pricing test, but that is from embeddings fed to a regression, not prompting. So how a 1.5B model produces a score is an open question (Q-E3.5).
-- **Verify before use:** confirm which yearly vintages exist (the Hugging Face listing seen on 2026-10-22 showed 2014 and 2016–2024; 2015 was not visible), that the model loads on the Spark, and record each vintage's revision hash.
+- **Yash, 2026-10-22/23:** use a model already on the Spark: **Gemma-4-26B-A4B** (5.5). Option A is not used for now. Every E3 report must carry the label **"possibly look-ahead-biased: scorer is a 2026 model applied to 2017–2025 news"**. The clean tests are dates after the model's training cutoff, and paper trading.
+- **Proposed (Q-E3.11):** score with the company **named** (no anonymization) as the main run. Anonymizing by string replacement misfired in the feasibility sample: headlines about another company read as if they were about ours. An anonymized run is a later, optional check.
+- If option A is run later, note that Lopez-Lira & Tang (Section 7.1) found small models (GPT-1, GPT-2, BERT) scored headlines poorly when prompted. That would apply to the ~1.5B ChronoGPT.
 
-### 5.5 Scoring
+### 5.5 Scoring with Gemma
 
-**Proposed default (Q-E3.5):** the Lopez-Lira & Tang prompt per (headline, symbol):
+**Model:** `/home/nbutme/.cache/huggingface/gemma-4-26B-it-uncensored-nvfp4`. It is a community NVFP4 quantization of an "abliterated" (refusal-removed) Gemma 4 26B-A4B-it mixture-of-experts model: 26B parameters, about 4B active per token, 16 GB on disk. Record the sha256 of `model.safetensors` in the score metadata as the scorer revision.
 
-> "Forget all your previous instructions. Pretend you are a financial expert. You are a financial expert with stock recommendation experience. Answer 'YES' if good news, 'NO' if bad news, or 'UNKNOWN' if uncertain in the first line. Then elaborate with one short and concise sentence on the next line. Is this headline good or bad for the stock price of _company_name_ in the short term? Headline: _headline_"
+**Serving:** the model needs a patched vLLM model file, so run it in the prebuilt local image. Do not patch any shared Python environment.
 
-(Wording as given in the paper, Section 5. "Short term" is kept as published even though E3 is monthly; see Q-E3.5.)
+```bash
+G=/home/nbutme/.cache/huggingface/gemma-4-26B-it-uncensored-nvfp4
+docker run -d --rm --name wsnews-gemma4 --gpus all --ipc host -p 127.0.0.1:8011:8011 \
+  -e VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 -e TORCH_MATMUL_PRECISION=high -e PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+  -v $G:/models/gemma4:ro \
+  -v $G/gemma4_patched.py:/usr/local/lib/python3.12/dist-packages/vllm/model_executor/models/gemma4.py:ro \
+  ghcr.io/aeon-7/vllm-spark-gemma4-nvfp4:latest \
+  bash -c "exec vllm serve /models/gemma4 --served-model-name gemma4 --host 0.0.0.0 --port 8011 \
+    --quantization compressed-tensors --max-model-len 4096 --max-num-seqs 64 --gpu-memory-utilization 0.40 \
+    --kv-cache-dtype fp8 --enable-prefix-caching --max-logprobs 20"
+# ready when: curl -sf localhost:8011/v1/models ; startup takes ~4-5 minutes
+docker stop wsnews-gemma4   # when scoring is done; the GB10 is shared
+```
 
-- Map YES → +1, NO → −1, UNKNOWN → 0. Greedy decoding (temperature 0).
-- Record the full prompt template hash, model id, vintage and revision, and the raw output for every scored article.
-- **Alternative (Q-E3.5):** use the model's embedding of the headline and fit a small regression (ridge) on each fold's training rows only. This is closer to how He et al. got their results, but it is a second trained model and needs its own purge and placebo handling.
-- **Multi-symbol articles:** proposed: score once per tagged symbol; drop articles tagged with more than 5 symbols, which are usually market round-ups (Q-E3.6).
+Before starting, check `nvidia-smi` for other GPU jobs. If one is using more than half the memory, wait and log it rather than competing.
+
+**Prompt (Proposed, Q-E3.5):** the Lopez-Lira & Tang prompt, verbatim from their Section 5, sent as one user message through `/v1/chat/completions` with `chat_template_kwargs: {"enable_thinking": false}`:
+
+```
+Forget all your previous instructions. Pretend you are a financial expert. You are a financial expert with stock recommendation experience. Answer "YES" if good news, "NO" if bad news, or "UNKNOWN" if uncertain in the first line. Then elaborate with one short and concise sentence on the next line. Is this headline good or bad for the stock price of {company_name} in the short term?
+Headline: {headline}
+```
+
+- `{company_name}`: the company's name from the SEC `company_tickers.json` title already in `data/sec/raw/<date>/` (e.g. "Apple Inc."). If the ticker is missing there (e.g. `BRK.B`), use the ticker.
+- Request: `temperature 0`, `max_tokens 40`, `logprobs true`, `top_logprobs 20`.
+- **Score:** from the first generated token's top-20 log-probabilities, sum the probability of tokens that normalize (strip whitespace, `"`, `*`, backticks; uppercase) to a prefix of `YES` (Y, YES), `NO` (N, NO), or `UNKNOWN` (at least 2 letters, e.g. UN, UNK, UNKNOWN). Renormalize the three to sum to 1. **`score = P(YES) − P(NO)`**, in [−1, 1]. If the three together have probability below 0.5, the score is null and the article is counted as unparsed.
+- Store per (article id, symbol): `score`, `p_yes`, `p_no`, `p_unknown`, the generated text, model sha256, prompt template sha256, and scored-at time.
+- **Headline only** for scoring (Proposed, Q-E3.3), matching the published method. Download summaries anyway so they can be tested later.
+- **Multi-symbol articles (Proposed, Q-E3.6):** score once per tagged universe symbol; skip articles tagged with more than 5 symbols, and count them in the coverage report.
+- Scoring is idempotent and resumable: key the output by (article id, symbol, model sha256, prompt sha256), and skip rows already scored.
+
+**Feasibility check (2026-10-23, same 131 headline–symbol pairs as the JEV-9B check):**
+- 131/131 parsed; YES/NO/UNKNOWN covered 99.9% of first-token probability.
+- 14.6 scores per second at 32 concurrent requests. At that rate, 1 million pairs take about 19 hours. Higher concurrency was not tested.
+- Gemma is decisive (86% of answers had probability above 0.9) and leans positive: 82 YES, 26 NO, 23 UNKNOWN.
+- Correlation with JEV-9B scores is 0.61. Most disagreements are mixed headlines, e.g. "Maintains Overweight, Lowers Price Target": Gemma said YES, JEV leaned negative. Because of the positive lean, all news features are ranked per date (5.6), so only relative scores matter.
+- This only shows the pipeline works. It is not evidence that the scores predict returns.
 
 ### 5.6 News features
 
@@ -191,19 +236,19 @@ Why monthly might still work: Chan (2003), "Stock Price Reaction to News and No-
 
 ### 5.8 Compute
 
-- ChronoGPT-instruct is ~1.5B parameters and fits easily in the Spark's 128 GB.
-- Total article count is unknown until E3.0. The scoring time estimate goes in the coverage report, before scoring starts.
-- Inference engine: proposed Hugging Face `transformers` (the model uses the GPT-2 tokenizer); vLLM only if it is confirmed to load these weights (Q-E3.8).
+- Gemma at 40% GPU memory leaves room for other users. The E1/E2 walk-forwards run on CPU alongside.
+- Total article count is unknown until E3.0. Put the scoring time estimate in the coverage report before scoring starts.
+- **Gate (Proposed):** if the estimate is above 48 hours, score only the article–symbol pairs needed for the training table (2016-12 onward, universe symbols, at most 5 tagged symbols) and write that down. Do not shorten the prompt or switch models.
 
 ### 5.9 Tests
 
 - **T-E3.1 Visibility:** an article with `created_at` one second after the tick is invisible to it and visible to the next tick.
-- **T-E3.2 Vintage:** a headline dated 2019-03-01 is scored by the vintage ending 2018-12-31, never a later one; scoring refuses if that vintage is missing.
-- **T-E3.3 Parse:** fixture model outputs "YES…", "NO…", "UNKNOWN…", and garbage map to +1, −1, 0, null.
+- **T-E3.2 Resume:** re-running the scorer over an already-scored fixture makes no new requests (stub HTTP server).
+- **T-E3.3 Parse:** fixture top-logprob lists whose first tokens are `YES`, `NO`, `UN`, `**`, and garbage give the expected `p_yes/p_no/p_unknown`, the score, and null when the three cover less than 0.5 probability.
 - **T-E3.4 Features:** hand-computed values for all four features on fixture articles.
 - **T-E3.5 Parity:** table rows equal `FeatureBuilder(feature_set="pxn-v1")` output on 5 fixture dates.
 - **T-E3.6 Downloader:** a mocked paginated download writes the manifest with correct sha256 and handles a 429 with backoff.
-- Tests use a stub scorer, never real model weights.
+- Tests use a stub scorer or stub HTTP server, never real model weights or the GPU.
 
 ### 5.10 Commands (after E3.0 is approved)
 
@@ -211,8 +256,9 @@ Why monthly might still work: Chan (2003), "Stock Price Reaction to News and No-
 uv run python -m ws.data.cli alpaca-news --start 2015-01-01 --end 2026-10-16
 uv run python -m ws.news.cli build --raw data/news/raw/<date> --out data/news/store
 uv run python -m ws.news.cli coverage --store data/news/store/<snapshot>.parquet --out docs/news-v1-coverage.md
-# stop: Yash reviews coverage
-uv run python -m ws.news.cli score --store data/news/store/<snapshot>.parquet --scorer chronogpt-instruct --out data/news/scores
+# Yash reviews the coverage report later; the implementer continues (see the 5.8 gate)
+# start the Gemma container (5.5) before scoring; stop it afterwards
+uv run python -m ws.news.cli score --store data/news/store/<snapshot>.parquet --scorer gemma4 --endpoint http://localhost:8011 --out data/news/scores
 uv run python -m ws.training.cli build-table --feature-set pxn-v1 --store data/pit-bars --news data/news/scores/<snapshot>.parquet --out data/training/pxn-v1-sip.parquet
 uv run python -m ws.training.cli walk-forward --table data/training/pxn-v1-sip.parquet --out runs/training
 ```

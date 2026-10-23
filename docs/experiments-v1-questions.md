@@ -27,10 +27,10 @@ Spec: `docs/experiments-v1-spec.md`. Only Yash resolves these. "Proposed" is the
 - **Q-E3.5 Scoring method.** (a) Lopez-Lira & Tang YES/NO/UNKNOWN prompt (proposed default; note small models did poorly with prompting in their paper); (b) embeddings + per-fold ridge regression (closer to He et al., but adds a second trained model); (c) both. If (a), keep "short term" as published, or change to "next month" to match the label? Unresolved.
 - **Q-E3.6 Multi-symbol articles.** Proposed: score per tagged symbol; drop articles tagged with more than 5 symbols. Unresolved.
 - **Q-E3.7 Base feature set.** Proposed: `px-v1` + news (`pxn-v1`). Also run `pxf-v1` + news? Unresolved.
-- **Q-E3.8 Inference engine.** Finding 2026-10-22: the installed vLLM (0.20.0, AgentCache venv) cannot load JEV-9B's text-only Qwen3.5 class (`Qwen3_5TextConfig` type error; JEV's README says it was tested on a September 2026 vLLM dev build). The `transformers` 5.9 + `peft` path works. Proposed: `transformers`. Unresolved.
-- **Q-E3.9 Missing vintages.** If a yearly vintage is missing (2015 was not visible on Hugging Face on 2026-10-22), proposed: use the most recent *earlier* vintage, never a later one. Accept? Unresolved.
+- **Q-E3.8 Inference engine.** Finding 2026-10-22: the installed vLLM (0.20.0, AgentCache venv) cannot load JEV-9B's text-only Qwen3.5 class (`Qwen3_5TextConfig` type error; JEV's README says it was tested on a September 2026 vLLM dev build). The `transformers` 5.9 + `peft` path works. Proposed: `transformers`. Unresolved. Update 2026-10-23: with Gemma chosen, vLLM in the local image `ghcr.io/aeon-7/vllm-spark-gemma4-nvfp4:latest` serves it correctly (spec 5.5), so this question no longer blocks anything.
+- **Q-E3.9 Missing vintages.** Not applicable while ChronoGPT is not used (Q-E3.2).
 
-- **Q-E3.10 Which local model.** Candidates on the Spark: JEV-9B (Qwen3.5-9B + a calibrated decision head; returns probabilities for good/bad/unclear in one forward pass, no text generation), Qwen3-30B-A3B (bf16, `/tmp/qwen3-30b-a3b`; note `/tmp` may be cleared on reboot), Gemma-4-26B-A4B NVFP4, Qwen3.8-Flash-Next NVFP4. Proposed: JEV-9B, because the feasibility check below worked and its output is a calibrated probability rather than parsed text. Unresolved.
+- **Q-E3.10 Which local model.** Yash, 2026-10-23: Gemma (Gemma-4-26B-A4B NVFP4 on the Spark). Serving and scoring are specified in spec 5.5. Resolved by Yash.
 - **Q-E3.11 Anonymization pitfall.** Replacing the target company's name with "the company" misfires when the headline is about a *different* company but tagged with ours (e.g. "Why Is AMD Stock Falling?" tagged INTC becomes a headline that seems to be about "the company"). In the sample, named and anonymized scores correlate 0.83 but differ by 0.25 on average, mostly on such headlines. If anonymizing, should the question name the headline's subject, or should articles whose headline does not mention the target be dropped or scored separately? Unresolved.
 
 ## Feasibility check (2026-10-22, scratch only, nothing added to the repo)
@@ -40,6 +40,9 @@ Spec: `docs/experiments-v1-spec.md`. Only Yash resolves these. "Proposed" is the
 - Scores look sensible on inspection: analyst downgrades and lawsuits near −1, price-target raises near +1, ambiguous headlines near 0 with high "unclear" probability. This is a sanity check only, not evidence of predictive value.
 - GPU was idle when checked (no other compute jobs on the GB10); the E1 walk-forward runs on CPU alongside.
 
+- Gemma check 2026-10-23 (same 131 pairs): all parsed; 14.6 scores/s at 32 concurrent; 82 YES / 26 NO / 23 UNKNOWN; correlation 0.61 with JEV-9B. Details in spec 5.5.
+
 ## Progress
 
+- 2026-10-23: Yash authorized implementation on Proposed defaults without stopping; the implementer marks each default "Assumed by implementer, <date>" here.
 - 2026-10-22: E1 (`pxv1f3-60a47f8a0fcb`) walk-forward started on commit `0646703`. E2 and E3 not started.
